@@ -1,6 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
-import math
+import numpy as np
+import matplotlib.pyplot as plt
 
 # ---------------------------------------------------------
 # 1. 페이지 설정 및 세련된 연두/민트(Light Green & Mint) 스타일링
@@ -541,7 +542,6 @@ elif st.session_state.step == "result":
         score_pct = max(score_pct, 48)
         normalized_scores[job] = score_pct
 
-    # MBTI 4대 지표 비율 산출 (각 축 5문항 기준)
     e_ratio = int((mbti_counts["E"] / 5) * 100)
     s_ratio = int((mbti_counts["S"] / 5) * 100)
     t_ratio = int((mbti_counts["T"] / 5) * 100)
@@ -553,7 +553,7 @@ elif st.session_state.step == "result":
     mbti_res += "T" if mbti_counts["T"] >= mbti_counts["F"] else "F"
     mbti_res += "J" if mbti_counts["J"] >= mbti_counts["P"] else "P"
 
-    # [1] 1순위 대표 직무 카드 (캡처 대상 영역)
+    # [1] 1순위 대표 직무 카드
     with st.container(border=True):
         st.markdown(
             f"""
@@ -575,7 +575,6 @@ elif st.session_state.step == "result":
             unsafe_allow_html=True
         )
 
-        # 결과지 이미지 다운로드
         components.html(
             """
             <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -601,60 +600,53 @@ elif st.session_state.step == "result":
             height=60
         )
 
-    # [2] 4각형 레이더 차트 (components.html로 안전하게 렌더링)
+    # [2] 4축 레이더 차트 (Matplotlib + st.pyplot)
     with st.container(border=True):
         st.markdown('<h3 style="font-size: 1.15rem; font-weight: 700; margin-bottom: 4px; color: #064E3B;">🧭 나의 무역 MBTI 성향 다이어그램</h3>', unsafe_allow_html=True)
         st.caption("각 축의 100%에 가까울수록 해당 지표의 행동 성향이 뚜렷함을 나타냅니다.")
 
-        # 중심점 (180, 150), 최대 반지름 R = 95
-        cx, cy, R = 180, 150, 95
-        pt_e = (cx, cy - (e_ratio / 100.0) * R)
-        pt_s = (cx + (s_ratio / 100.0) * R, cy)
-        pt_t = (cx, cy + (t_ratio / 100.0) * R)
-        pt_j = (cx - (j_ratio / 100.0) * R, cy)
-        poly_pts = f"{pt_e[0]:.1f},{pt_e[1]:.1f} {pt_s[0]:.1f},{pt_s[1]:.1f} {pt_t[0]:.1f},{pt_t[1]:.1f} {pt_j[0]:.1f},{pt_j[1]:.1f}"
-
-        html_radar = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="utf-8">
-            <style>
-                body {{ margin: 0; padding: 0; background: transparent; display: flex; justify-content: center; font-family: sans-serif; }}
-                text {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }}
-            </style>
-        </head>
-        <body>
-            <svg width="360" height="300" viewBox="0 0 360 300">
-                <!-- 동심 그리드 사각형 -->
-                <polygon points="{cx},{cy-R*0.25} {cx+R*0.25},{cy} {cx},{cy+R*0.25} {cx-R*0.25},{cy}" fill="none" stroke="#E2E8F0" stroke-width="1"/>
-                <polygon points="{cx},{cy-R*0.5} {cx+R*0.5},{cy} {cx},{cy+R*0.5} {cx-R*0.5},{cy}" fill="none" stroke="#E2E8F0" stroke-width="1"/>
-                <polygon points="{cx},{cy-R*0.75} {cx+R*0.75},{cy} {cx},{cy+R*0.75} {cx-R*0.75},{cy}" fill="none" stroke="#E2E8F0" stroke-width="1"/>
-                <polygon points="{cx},{cy-R} {cx+R},{cy} {cx},{cy+R} {cx-R},{cy}" fill="none" stroke="#CBD5E1" stroke-width="1.5"/>
-
-                <!-- 십자선 -->
-                <line x1="{cx}" y1="{cy-R}" x2="{cx}" y2="{cy+R}" stroke="#CBD5E1" stroke-width="1" stroke-dasharray="3,3"/>
-                <line x1="{cx-R}" y1="{cy}" x2="{cx+R}" y2="{cy}" stroke="#CBD5E1" stroke-width="1" stroke-dasharray="3,3"/>
-
-                <!-- 4각형 영역 -->
-                <polygon points="{poly_pts}" fill="rgba(16, 185, 129, 0.3)" stroke="#059669" stroke-width="2.5"/>
-
-                <!-- 포인트 점 -->
-                <circle cx="{pt_e[0]:.1f}" cy="{pt_e[1]:.1f}" r="4.5" fill="#047857"/>
-                <circle cx="{pt_s[0]:.1f}" cy="{pt_s[1]:.1f}" r="4.5" fill="#047857"/>
-                <circle cx="{pt_t[0]:.1f}" cy="{pt_t[1]:.1f}" r="4.5" fill="#047857"/>
-                <circle cx="{pt_j[0]:.1f}" cy="{pt_j[1]:.1f}" r="4.5" fill="#047857"/>
-
-                <!-- 라벨 텍스트 -->
-                <text x="{cx}" y="{cy-R-12}" text-anchor="middle" font-size="12" font-weight="700" fill="#065F46">E (외향: {e_ratio}%)</text>
-                <text x="{cx+R+8}" y="{cy+4}" text-anchor="start" font-size="12" font-weight="700" fill="#065F46">S (감각: {s_ratio}%)</text>
-                <text x="{cx}" y="{cy+R+20}" text-anchor="middle" font-size="12" font-weight="700" fill="#065F46">T (사고: {t_ratio}%)</text>
-                <text x="{cx-R-8}" y="{cy+4}" text-anchor="end" font-size="12" font-weight="700" fill="#065F46">J (판단: {j_ratio}%)</text>
-            </svg>
-        </body>
-        </html>
-        """
-        components.html(html_radar, height=305)
+        # 레이더 차트 데이터 생성
+        labels = [
+            f'E (외향: {e_ratio}%)', 
+            f'S (감각: {s_ratio}%)', 
+            f'T (사고: {t_ratio}%)', 
+            f'J (판단: {j_ratio}%)'
+        ]
+        values = [e_ratio, s_ratio, t_ratio, j_ratio]
+        
+        # 각도 계산 (4각 다이어그램)
+        num_vars = len(labels)
+        angles = np.linspace(0, 2 * np.pi, num_vars, endpoint=False).tolist()
+        
+        # 폐곡선 처리
+        values += values[:1]
+        angles += angles[:1]
+        
+        fig, ax = plt.subplots(figsize=(4.5, 4.5), subplot_kw=dict(polar=True))
+        fig.patch.set_facecolor('#FFFFFF')
+        ax.set_facecolor('#FFFFFF')
+        
+        # 12시 방향을 시작점으로 회전
+        ax.set_theta_offset(np.pi / 2)
+        ax.set_theta_direction(-1)
+        
+        # 눈금 및 축 설정
+        ax.set_ylim(0, 100)
+        ax.set_yticks([25, 50, 75, 100])
+        ax.set_yticklabels(['25%', '50%', '75%', '100%'], color='#94A3B8', size=8)
+        ax.grid(color='#E2E8F0', linestyle='--', linewidth=0.8)
+        
+        # 각 축 라벨
+        ax.set_xticks(angles[:-1])
+        ax.set_xticklabels(labels, size=9.5, weight='bold', color='#065F46')
+        
+        # 다각형 및 영역 채우기
+        ax.plot(angles, values, color='#059669', linewidth=2.2, linestyle='solid')
+        ax.fill(angles, values, color='#10B981', alpha=0.3)
+        ax.scatter(angles[:-1], values[:-1], color='#047857', s=45, zorder=10)
+        
+        st.pyplot(fig)
+        plt.close(fig)
 
     # [3] 추천 직무 맞춤 채용공고 바로가기
     with st.container(border=True):
