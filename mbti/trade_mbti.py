@@ -1,5 +1,6 @@
 import streamlit as st
 import streamlit.components.v1 as components
+import math
 
 # ---------------------------------------------------------
 # 1. 페이지 설정 및 세련된 연두/민트(Light Green & Mint) 스타일링
@@ -12,14 +13,12 @@ st.set_page_config(
 
 CUSTOM_CSS = """
 <style>
-/* 전체 배경: 싱그럽고 눈이 편안한 파스텔 소프트 연두 */
 .stApp {
     background-color: #F4FBF7;
     color: #1E293B;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
-/* 텍스트 타이틀 스타일 */
 .main-title {
     font-size: 2.3rem;
     font-weight: 800;
@@ -44,7 +43,6 @@ CUSTOM_CSS = """
     margin-bottom: 24px;
 }
 
-/* 파스텔 연두 뱃지 */
 .category-badge {
     display: inline-block;
     padding: 6px 14px;
@@ -67,7 +65,6 @@ CUSTOM_CSS = """
     margin: 4px;
 }
 
-/* 상위 1~3순위 카드 그리드 */
 .top3-box {
     border-radius: 12px;
     padding: 16px;
@@ -87,7 +84,6 @@ CUSTOM_CSS = """
     border: 1.5px solid #E2E8F0;
 }
 
-/* MBTI 지표 분석 박스 */
 .mbti-dim-card {
     background-color: #FFFFFF;
     border-left: 4px solid #10B981;
@@ -97,7 +93,6 @@ CUSTOM_CSS = """
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
 }
 
-/* Streamlit 기본 테두리 컨테이너 커스텀 */
 div[data-testid="stVerticalBlockBorderWrapper"] {
     background-color: #FFFFFF !important;
     border-radius: 18px !important;
@@ -107,7 +102,6 @@ div[data-testid="stVerticalBlockBorderWrapper"] {
     margin-bottom: 20px !important;
 }
 
-/* 일반 선택지 버튼 */
 div.stButton > button {
     border-radius: 12px;
     font-weight: 600;
@@ -123,7 +117,6 @@ div.stButton > button:hover {
     color: #047857;
 }
 
-/* Primary 버튼 */
 div.stButton > button[kind="primary"] {
     background: linear-gradient(135deg, #34D399 0%, #059669 100%) !important;
     color: #FFFFFF !important;
@@ -530,7 +523,6 @@ elif st.session_state.step == "test":
 # 7. PAGE 03 & 04 — RESULT
 # ---------------------------------------------------------
 elif st.session_state.step == "result":
-    # 빵빠레 효과 연출
     st.balloons()
 
     scores = st.session_state.scores
@@ -583,7 +575,7 @@ elif st.session_state.step == "result":
             unsafe_allow_html=True
         )
 
-        # 결과지 이미지 다운로드 (html2canvas)
+        # 결과지 이미지 다운로드
         components.html(
             """
             <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -609,50 +601,60 @@ elif st.session_state.step == "result":
             height=60
         )
 
-    # [2] 순수 SVG 기반 4각형 레이더 차트
+    # [2] 4각형 레이더 차트 (components.html로 안전하게 렌더링)
     with st.container(border=True):
-        st.markdown('<h3 style="font-size: 1.15rem; font-weight: 700; margin-bottom: 12px; color: #064E3B;">🧭 나의 무역 MBTI 성향 다이어그램</h3>', unsafe_allow_html=True)
+        st.markdown('<h3 style="font-size: 1.15rem; font-weight: 700; margin-bottom: 4px; color: #064E3B;">🧭 나의 무역 MBTI 성향 다이어그램</h3>', unsafe_allow_html=True)
         st.caption("각 축의 100%에 가까울수록 해당 지표의 행동 성향이 뚜렷함을 나타냅니다.")
 
-        # 중심점 (175, 175), 최대 반지름 R = 110
-        cx, cy, R = 175, 175, 110
+        # 중심점 (180, 150), 최대 반지름 R = 95
+        cx, cy, R = 180, 150, 95
         pt_e = (cx, cy - (e_ratio / 100.0) * R)
         pt_s = (cx + (s_ratio / 100.0) * R, cy)
         pt_t = (cx, cy + (t_ratio / 100.0) * R)
         pt_j = (cx - (j_ratio / 100.0) * R, cy)
-        poly_points = f"{pt_e[0]},{pt_e[1]} {pt_s[0]},{pt_s[1]} {pt_t[0]},{pt_t[1]} {pt_j[0]},{pt_j[1]}"
+        poly_pts = f"{pt_e[0]:.1f},{pt_e[1]:.1f} {pt_s[0]:.1f},{pt_s[1]:.1f} {pt_t[0]:.1f},{pt_t[1]:.1f} {pt_j[0]:.1f},{pt_j[1]:.1f}"
 
-        svg_chart = f"""
-        <div style="display: flex; justify-content: center; align-items: center; padding: 10px 0;">
-            <svg width="350" height="350" viewBox="0 0 350 350" style="background: transparent;">
-                <!-- 동심 사각형 그리드 -->
-                <polygon points="175,{175-R*0.25} {175+R*0.25},175 175,{175+R*0.25} {175-R*0.25},175" fill="none" stroke="#E2E8F0" stroke-width="1"/>
-                <polygon points="175,{175-R*0.5} {175+R*0.5},175 175,{175+R*0.5} {175-R*0.5},175" fill="none" stroke="#E2E8F0" stroke-width="1"/>
-                <polygon points="175,{175-R*0.75} {175+R*0.75},175 175,{175+R*0.75} {175-R*0.75},175" fill="none" stroke="#E2E8F0" stroke-width="1"/>
-                <polygon points="175,{175-R} {175+R},175 175,{175+R} {175-R},175" fill="none" stroke="#CBD5E1" stroke-width="1.5"/>
+        html_radar = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <style>
+                body {{ margin: 0; padding: 0; background: transparent; display: flex; justify-content: center; font-family: sans-serif; }}
+                text {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }}
+            </style>
+        </head>
+        <body>
+            <svg width="360" height="300" viewBox="0 0 360 300">
+                <!-- 동심 그리드 사각형 -->
+                <polygon points="{cx},{cy-R*0.25} {cx+R*0.25},{cy} {cx},{cy+R*0.25} {cx-R*0.25},{cy}" fill="none" stroke="#E2E8F0" stroke-width="1"/>
+                <polygon points="{cx},{cy-R*0.5} {cx+R*0.5},{cy} {cx},{cy+R*0.5} {cx-R*0.5},{cy}" fill="none" stroke="#E2E8F0" stroke-width="1"/>
+                <polygon points="{cx},{cy-R*0.75} {cx+R*0.75},{cy} {cx},{cy+R*0.75} {cx-R*0.75},{cy}" fill="none" stroke="#E2E8F0" stroke-width="1"/>
+                <polygon points="{cx},{cy-R} {cx+R},{cy} {cx},{cy+R} {cx-R},{cy}" fill="none" stroke="#CBD5E1" stroke-width="1.5"/>
 
-                <!-- 십자 가이드라인 -->
-                <line x1="175" y1="{175-R}" x2="175" y2="{175+R}" stroke="#CBD5E1" stroke-width="1" stroke-dasharray="3,3"/>
-                <line x1="{175-R}" y1="175" x2="{175+R}" y2="175" stroke="#CBD5E1" stroke-width="1" stroke-dasharray="3,3"/>
+                <!-- 십자선 -->
+                <line x1="{cx}" y1="{cy-R}" x2="{cx}" y2="{cy+R}" stroke="#CBD5E1" stroke-width="1" stroke-dasharray="3,3"/>
+                <line x1="{cx-R}" y1="{cy}" x2="{cx+R}" y2="{cy}" stroke="#CBD5E1" stroke-width="1" stroke-dasharray="3,3"/>
 
                 <!-- 4각형 영역 -->
-                <polygon points="{poly_points}" fill="rgba(16, 185, 129, 0.3)" stroke="#059669" stroke-width="2.5"/>
+                <polygon points="{poly_pts}" fill="rgba(16, 185, 129, 0.3)" stroke="#059669" stroke-width="2.5"/>
 
-                <!-- 데이터 포인트 -->
-                <circle cx="{pt_e[0]}" cy="{pt_e[1]}" r="4.5" fill="#047857"/>
-                <circle cx="{pt_s[0]}" cy="{pt_s[1]}" r="4.5" fill="#047857"/>
-                <circle cx="{pt_t[0]}" cy="{pt_t[1]}" r="4.5" fill="#047857"/>
-                <circle cx="{pt_j[0]}" cy="{pt_j[1]}" r="4.5" fill="#047857"/>
+                <!-- 포인트 점 -->
+                <circle cx="{pt_e[0]:.1f}" cy="{pt_e[1]:.1f}" r="4.5" fill="#047857"/>
+                <circle cx="{pt_s[0]:.1f}" cy="{pt_s[1]:.1f}" r="4.5" fill="#047857"/>
+                <circle cx="{pt_t[0]:.1f}" cy="{pt_t[1]:.1f}" r="4.5" fill="#047857"/>
+                <circle cx="{pt_j[0]:.1f}" cy="{pt_j[1]:.1f}" r="4.5" fill="#047857"/>
 
-                <!-- 축 라벨 -->
-                <text x="175" y="{175-R-12}" text-anchor="middle" font-size="12" font-weight="700" fill="#065F46">E (외향: {e_ratio}%)</text>
-                <text x="{175+R+10}" y="179" text-anchor="start" font-size="12" font-weight="700" fill="#065F46">S (감각: {s_ratio}%)</text>
-                <text x="175" y="{175+R+22}" text-anchor="middle" font-size="12" font-weight="700" fill="#065F46">T (사고: {t_ratio}%)</text>
-                <text x="{175-R-10}" y="179" text-anchor="end" font-size="12" font-weight="700" fill="#065F46">J (판단: {j_ratio}%)</text>
+                <!-- 라벨 텍스트 -->
+                <text x="{cx}" y="{cy-R-12}" text-anchor="middle" font-size="12" font-weight="700" fill="#065F46">E (외향: {e_ratio}%)</text>
+                <text x="{cx+R+8}" y="{cy+4}" text-anchor="start" font-size="12" font-weight="700" fill="#065F46">S (감각: {s_ratio}%)</text>
+                <text x="{cx}" y="{cy+R+20}" text-anchor="middle" font-size="12" font-weight="700" fill="#065F46">T (사고: {t_ratio}%)</text>
+                <text x="{cx-R-8}" y="{cy+4}" text-anchor="end" font-size="12" font-weight="700" fill="#065F46">J (판단: {j_ratio}%)</text>
             </svg>
-        </div>
+        </body>
+        </html>
         """
-        st.markdown(svg_chart, unsafe_allow_html=True)
+        components.html(html_radar, height=305)
 
     # [3] 추천 직무 맞춤 채용공고 바로가기
     with st.container(border=True):
