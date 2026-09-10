@@ -1,5 +1,4 @@
 import datetime
-import math
 import os
 from pathlib import Path
 import pandas as pd
@@ -148,7 +147,7 @@ if "amount" not in st.session_state:
     st.session_state.amount = 10000.0
 
 
-# 5. 환율 API 호출
+# 5. 실시간 환율 API 호출
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_api_rates(base="USD"):
     fallback_rates = {
@@ -187,13 +186,49 @@ def calculate_rate(f_sym, t_sym):
     return r_t / r_f
 
 
-# 6. 상단 인디케이터
+# 6. 실제 과거 환율 API 호출 (Frankfurter - ECB 공시 실제 데이터)
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_real_historical_rates(base="USD", target="KRW", days=30):
+    """실제 오픈 공공 금융 API로부터 과거 n일간의 실제 환율 데이터를 조회합니다."""
+    end_date = datetime.date.today()
+    start_date = end_date - datetime.timedelta(days=days)
+
+    # Frankfurter API는 EUR/USD/GBP/JPY/KRW 등 공식 환율 시계열 무료 제공
+    url = f"https://api.frankfurter.app/{start_date.strftime('%Y-%m-%d')}..{end_date.strftime('%Y-%m-%d')}?from={base}&to={target}"
+    try:
+        res = requests.get(url, timeout=5)
+        res.raise_for_status()
+        data = res.json()
+        rates_dict = data.get("rates", {})
+        if rates_dict:
+            df = pd.DataFrame(
+                [
+                    {
+                        "Date": pd.to_datetime(d),
+                        f"{base}/{target}": val.get(target),
+                    }
+                    for d, val in rates_dict.items()
+                ]
+            )
+            df = df.sort_values("Date").set_index("Date")
+            return df
+    except Exception:
+        pass
+
+    # 통신 실패 시 단일 기준점 데이터 반환
+    cur_val = calculate_rate(base, target)
+    return pd.DataFrame(
+        {f"{base}/{target}": [cur_val]}, index=[pd.to_datetime(end_date)]
+    )
+
+
+# 7. 상단 인디케이터
 st.markdown(
     f"""
     <div class="top-status-bar">
         <div>
             <span class="live-pulse"></span>
-            <b>FX & TRADE EXECUTIVE DESK</b> &nbsp;|&nbsp; <span>해외소싱 수입원가 및 외환 리스크 통합 분석기</span>
+            <b>FX & TRADE EXECUTIVE DESK</b> &nbsp;|&nbsp; <span>해외소싱 수입원가 및 실데이터 환율 분석</span>
         </div>
         <div>
             상태: <b>{conn_status}</b> &nbsp;|&nbsp; 데이터 기준: <b>{last_updated}</b>
@@ -203,7 +238,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# 7. 사이드바
+# 8. 사이드바
 with st.sidebar:
     st.markdown("### 📌 **Menu**")
     menu = st.radio(
@@ -285,19 +320,10 @@ if menu == "Dashboard":
             unsafe_allow_html=True,
         )
     with d2:
-        st.subheader("📈 USD / KRW 30일 변동 추이")
-        base_val = rates.get("KRW", 1338.80)
-        dates = [
-            datetime.date.today() - datetime.timedelta(days=i)
-            for i in range(30, -1, -1)
-        ]
-        rates_trend = [
-            round(base_val + (math.sin(i / 3.0) * 10.0) - ((i % 4) * 1.2), 2)
-            for i in range(len(dates))
-        ]
-        df_chart = pd.DataFrame({"USD/KRW": rates_trend}, index=dates)
-        # 로즈 핑크 컬러 적용
-        st.line_chart(df_chart, height=240, color="#F43F5E")
+        st.subheader("📈 USD / KRW 실제 30일 변동 추이 (API)")
+        # 실제 Frankfurter API 시계열 호출
+        df_real_chart = fetch_real_historical_rates("USD", "KRW", days=30)
+        st.line_chart(df_real_chart, height=240, color="#F43F5E")
 
 # ========================================================
 # [메뉴: 환율 계산기]
@@ -335,20 +361,20 @@ elif menu == "환율 계산기":
 # [메뉴: 환율 추이]
 # ========================================================
 elif menu == "환율 추이":
-    st.title("📊 통화별 환율 추이 분석")
-    tgt = st.selectbox("조회 통화 (USD 기준)", ["KRW", "EUR", "JPY", "CNY", "GBP"])
-    cur_v = calculate_rate("USD", tgt)
-    d_list = [
-        datetime.date.today() - datetime.timedelta(days=i)
-        for i in range(30, -1, -1)
-    ]
-    t_vals = [
-        round(cur_v + (math.sin(i / 2.5) * (cur_v * 0.008)), 4)
-        for i in range(len(d_list))
-    ]
-    df_trend = pd.DataFrame({f"USD/{tgt}": t_vals}, index=d_list)
-    # 로즈 핑크 컬러 적용
-    st.line_chart(df_trend, height=350, color="#F43F5E")
+    st.title("📊 실제 통화별 환율 추이 분석 (API)")
+    tgt_col, day_col = st.columns([2, 1])
+    with tgt_col:
+        tgt = st.selectbox(
+            "조회 대상 통화 (USD 기준)", ["KRW", "EUR", "JPY", "GBP"]
+        )
+    with day_col:
+        sel_days = st.selectbox(
+            "조회 기간", [30, 60, 90, 180], format_func=lambda x: f"{x}일"
+        )
+
+    # 실제 API 호출
+    df_trend_real = fetch_real_historical_rates("USD", tgt, days=sel_days)
+    st.line_chart(df_trend_real, height=350, color="#F43F5E")
 
 # ========================================================
 # [메뉴: 💼 Trade Calculator]
@@ -580,12 +606,12 @@ elif menu == "💼 Trade Calculator":
         mime="text/csv",
     )
 
-# 8. 푸터
+# 9. 푸터
 st.markdown("---")
 st.markdown(
     """
     <div style="text-align: center; color: #FB7185; font-size: 0.8rem; font-weight: 500;">
-        🌸 Executive FX & Trade Platform © 2026. Powered by Streamlit.
+        🌸 Executive FX & Trade Platform © 2026. Powered by Streamlit & Official ECB Data.
     </div>
 """,
     unsafe_allow_html=True,
