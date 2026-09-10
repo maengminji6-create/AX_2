@@ -95,8 +95,6 @@ st.markdown(
         font-weight: 900;
         color: #FFFFFF;
     }
-    
-    /* 핑크 그라데이션 원가 비중 게이지 카드 */
     .chart-container-card {
         background: #FFFFFF;
         border: 1px solid #FFE4E6;
@@ -126,7 +124,6 @@ st.markdown(
     .gauge-bar-fill {
         height: 100%;
         border-radius: 999px;
-        transition: width 0.4s ease;
     }
     </style>
 """,
@@ -382,7 +379,7 @@ if menu == "💼 Trade Calculator":
 
         st.write("")
 
-        # 핑크 그라데이션 원가 비중 게이지 바 (UI와 일체화)
+        # Streamlit Markdown 줄바꿈/들여쓰기 버그를 원천 차단한 안전 한 줄 HTML 생성
         items = [
             ("물품 원화대금", prod_krw, "linear-gradient(90deg, #F43F5E, #FB7185)"),
             ("수입 부가세 (10%)", vat_krw, "linear-gradient(90deg, #FB7185, #FDA4AF)"),
@@ -391,22 +388,15 @@ if menu == "💼 Trade Calculator":
             ("통관 부대비용", misc_input, "linear-gradient(90deg, #E2E8F0, #CBD5E1)"),
         ]
 
-        gauge_html = '<div class="chart-container-card"><div style="font-size:0.95rem; font-weight:700; color:#881337; margin-bottom:14px;">🌸 원가 항목별 구성 비중</div>'
-        for name, val, grad in items:
-            pct = (val / final_total_krw * 100) if final_total_krw > 0 else 0
-            gauge_html += f"""
-            <div class="gauge-row">
-                <div class="gauge-labels">
-                    <span>{name}</span>
-                    <span>₩{val:,.0f} ({pct:.1f}%)</span>
-                </div>
-                <div class="gauge-bar-bg">
-                    <div class="gauge-bar-fill" style="width: {pct:.1f}%; background: {grad};"></div>
-                </div>
-            </div>
-            """
-        gauge_html += "</div>"
-        st.markdown(gauge_html, unsafe_allow_html=True)
+        rows_html = "".join([
+            f'<div class="gauge-row">'
+            f'<div class="gauge-labels"><span>{name}</span><span>₩{val:,.0f} ({(val / final_total_krw * 100 if final_total_krw > 0 else 0):.1f}%)</span></div>'
+            f'<div class="gauge-bar-bg"><div class="gauge-bar-fill" style="width:{(val / final_total_krw * 100 if final_total_krw > 0 else 0):.1f}%; background:{grad};"></div></div>'
+            f'</div>'
+            for name, val, grad in items
+        ])
+        gauge_container = f'<div class="chart-container-card"><div style="font-size:0.95rem; font-weight:700; color:#881337; margin-bottom:14px;">🌸 원가 항목별 구성 비중</div>{rows_html}</div>'
+        st.markdown(gauge_container, unsafe_allow_html=True)
 
     st.markdown("---")
 
