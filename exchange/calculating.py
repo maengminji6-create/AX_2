@@ -28,7 +28,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# 3. 로맨틱 소프트 핑크 & 비즈니스 대시보드 CSS
+# 3. 로맨틱 소프트 핑크 테마 CSS
 st.markdown(
     """
     <style>
@@ -94,6 +94,39 @@ st.markdown(
         font-size: 2.3rem;
         font-weight: 900;
         color: #FFFFFF;
+    }
+    
+    /* 핑크 그라데이션 원가 비중 게이지 카드 */
+    .chart-container-card {
+        background: #FFFFFF;
+        border: 1px solid #FFE4E6;
+        border-radius: 14px;
+        padding: 20px 22px;
+        box-shadow: 0 4px 12px rgba(244, 63, 94, 0.05);
+        margin-top: 10px;
+    }
+    .gauge-row {
+        margin-bottom: 12px;
+    }
+    .gauge-labels {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.84rem;
+        font-weight: 600;
+        color: #475569;
+        margin-bottom: 4px;
+    }
+    .gauge-bar-bg {
+        width: 100%;
+        height: 10px;
+        background-color: #FFF1F2;
+        border-radius: 999px;
+        overflow: hidden;
+    }
+    .gauge-bar-fill {
+        height: 100%;
+        border-radius: 999px;
+        transition: width 0.4s ease;
     }
     </style>
 """,
@@ -208,7 +241,7 @@ with st.sidebar:
     )
 
 # ========================================================
-# [메뉴: 💼 Trade Calculator] - 실무용 대시보드로 전면 재편
+# [메뉴: 💼 Trade Calculator]
 # ========================================================
 if menu == "💼 Trade Calculator":
     st.title("💼 무역 수입원가 분석 & FX 스트레스 테스트")
@@ -216,7 +249,6 @@ if menu == "💼 Trade Calculator":
         "수출입 실무 견적 작성, 품목별 관세율/Incoterms 조건 연동 및 환율 변동 시나리오 테이블을 제공합니다."
     )
 
-    # 1. 상단: 빠른 템플릿 프리셋
     p_col1, p_col2, p_col3 = st.columns([1.5, 1.5, 2])
     with p_col1:
         trade_preset = st.selectbox(
@@ -242,7 +274,6 @@ if menu == "💼 Trade Calculator":
         st.write("")
         st.caption("💡 선택한 품목과 무역 조건에 맞춰 관세율과 운임 항목이 자동 계산됩니다.")
 
-    # 프리셋에 따른 기본 관세율 자동 설정
     preset_tariffs = {
         "직접 입력": 8.0,
         "IT / 반도체 부품 (관세 0%)": 0.0,
@@ -254,7 +285,6 @@ if menu == "💼 Trade Calculator":
 
     st.write("")
 
-    # 2. 본문 2단 구성: [좌: 상세 입력] | [우: 총괄 지표 및 시각화 카드]
     left_side, right_side = st.columns([1, 1.3], gap="large")
 
     with left_side:
@@ -305,18 +335,16 @@ if menu == "💼 Trade Calculator":
             step=10000.0,
         )
 
-        # 관세법상 정밀 산출
         prod_krw = invoice_val * applied_fx
         ship_krw = ship_input * applied_fx
         cif_krw = prod_krw + ship_krw
         duty_krw = cif_krw * (custom_tariff / 100.0)
-        vat_krw = (cif_krw + duty_krw) * 0.10  # 부가세 10%
+        vat_krw = (cif_krw + duty_krw) * 0.10
         final_total_krw = cif_krw + duty_krw + vat_krw + misc_input
 
     with right_side:
         st.subheader("📊 종합 수입원가 집계")
 
-        # 메인 하이라이트 배너
         st.markdown(
             f"""
             <div class="total-banner">
@@ -330,7 +358,6 @@ if menu == "💼 Trade Calculator":
             unsafe_allow_html=True,
         )
 
-        # 4대 핵심 비용 카드 그리드
         m_c1, m_c2, m_c3, m_c4 = st.columns(4)
         with m_c1:
             st.markdown(
@@ -354,30 +381,35 @@ if menu == "💼 Trade Calculator":
             )
 
         st.write("")
-        # 원가 구조 바 차트 (Streamlit 네이티브)
-        cost_breakdown_df = pd.DataFrame(
-            {
-                "비용 항목": [
-                    "물품 원화대금",
-                    "국제 운임",
-                    "관세",
-                    "부가세",
-                    "통관 부대비용",
-                ],
-                "금액(KRW)": [
-                    prod_krw,
-                    ship_krw,
-                    duty_krw,
-                    vat_krw,
-                    misc_input,
-                ],
-            }
-        ).set_index("비용 항목")
-        st.bar_chart(cost_breakdown_df, height=180)
+
+        # 핑크 그라데이션 원가 비중 게이지 바 (UI와 일체화)
+        items = [
+            ("물품 원화대금", prod_krw, "linear-gradient(90deg, #F43F5E, #FB7185)"),
+            ("수입 부가세 (10%)", vat_krw, "linear-gradient(90deg, #FB7185, #FDA4AF)"),
+            ("예상 관세", duty_krw, "linear-gradient(90deg, #FDA4AF, #FECDD3)"),
+            ("국제 운임", ship_krw, "linear-gradient(90deg, #F472B6, #FBCFE8)"),
+            ("통관 부대비용", misc_input, "linear-gradient(90deg, #E2E8F0, #CBD5E1)"),
+        ]
+
+        gauge_html = '<div class="chart-container-card"><div style="font-size:0.95rem; font-weight:700; color:#881337; margin-bottom:14px;">🌸 원가 항목별 구성 비중</div>'
+        for name, val, grad in items:
+            pct = (val / final_total_krw * 100) if final_total_krw > 0 else 0
+            gauge_html += f"""
+            <div class="gauge-row">
+                <div class="gauge-labels">
+                    <span>{name}</span>
+                    <span>₩{val:,.0f} ({pct:.1f}%)</span>
+                </div>
+                <div class="gauge-bar-bg">
+                    <div class="gauge-bar-fill" style="width: {pct:.1f}%; background: {grad};"></div>
+                </div>
+            </div>
+            """
+        gauge_html += "</div>"
+        st.markdown(gauge_html, unsafe_allow_html=True)
 
     st.markdown("---")
 
-    # 3. 하단 실무 기능: FX 스트레스 테스트 매트릭스 & CSV 다운로드
     st.subheader("🔮 환율 변동 시나리오 스트레스 테스트 (FX Stress Test)")
     st.caption("환율이 변동했을 때 최종 입고 원가와 원가 변동폭을 즉시 시뮬레이션합니다.")
 
@@ -411,7 +443,6 @@ if menu == "💼 Trade Calculator":
     sim_df = pd.DataFrame(sim_data)
     st.dataframe(sim_df, use_container_width=True, hide_index=True)
 
-    # 4. 견적서 다운로드 버튼 (실무 보고용)
     report_data = {
         "항목": [
             "인보이스 대금",
