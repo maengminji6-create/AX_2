@@ -22,21 +22,19 @@ API_KEY = os.getenv("EXCHANGE_RATE_API_KEY")
 
 # 2. 페이지 기본 설정
 st.set_page_config(
-    page_title="FX Platform & Trade Analysis",
+    page_title="FX & Trade Executive Desk",
     page_icon="🌸",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-# 3. 로맨틱 소프트 핑크 & 피치 그라데이션 CSS 테마
+# 3. 로맨틱 소프트 핑크 & 비즈니스 대시보드 CSS
 st.markdown(
     """
     <style>
     html, body, [class*="css"] {
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Malgun Gothic", sans-serif;
     }
-    
-    /* 상단 상태 바: 부드러운 로즈 핑크 그라데이션 */
     .top-status-bar {
         display: flex;
         justify-content: space-between;
@@ -59,79 +57,43 @@ st.markdown(
         margin-right: 6px;
         box-shadow: 0 0 8px #F43F5E;
     }
-    
-    /* 카드 컴포넌트: 은은한 핑크 테두리와 그림자 */
-    .metric-card {
+    .cost-card {
         background: #FFFFFF;
         border: 1px solid #FFE4E6;
-        border-radius: 16px;
+        border-radius: 14px;
         padding: 18px;
-        box-shadow: 0 4px 12px rgba(251, 113, 133, 0.06);
-        transition: transform 0.2s ease;
+        text-align: center;
+        box-shadow: 0 2px 8px rgba(244, 63, 94, 0.04);
     }
-    .metric-card:hover {
-        transform: translateY(-2px);
-        border-color: #FDA4AF;
-    }
-    .metric-title {
-        font-size: 0.85rem;
+    .cost-title {
+        font-size: 0.82rem;
         font-weight: 600;
         color: #9F1239;
     }
-    .metric-val {
-        font-size: 1.5rem;
+    .cost-val {
+        font-size: 1.4rem;
         font-weight: 800;
         color: #4C0519;
-        margin: 6px 0;
+        margin-top: 4px;
     }
-    .badge-up {
-        color: #E11D48;
-        background-color: #FFF1F2;
-        padding: 3px 8px;
-        border-radius: 6px;
-        font-weight: 700;
-        font-size: 0.8rem;
-    }
-    .badge-down {
-        color: #2563EB;
-        background-color: #EFF6FF;
-        padding: 3px 8px;
-        border-radius: 6px;
-        font-weight: 700;
-        font-size: 0.8rem;
-    }
-    
-    /* 대형 계산기 결과 박스: 핑크 그라데이션 */
-    .calc-display {
+    .total-banner {
         background: linear-gradient(135deg, #FB7185 0%, #F43F5E 50%, #E11D48 100%);
         color: #FFFFFF;
-        border-radius: 18px;
-        padding: 26px;
+        border-radius: 14px;
+        padding: 20px;
         text-align: center;
-        margin: 18px 0;
-        box-shadow: 0 10px 25px rgba(244, 63, 94, 0.25);
+        box-shadow: 0 8px 20px rgba(244, 63, 94, 0.2);
+        margin: 15px 0;
     }
-    .calc-subtext {
-        color: #FFE4E6;
+    .total-title {
         font-size: 0.95rem;
-        font-weight: 500;
+        color: #FFE4E6;
+        font-weight: 600;
     }
-    .calc-main-result {
+    .total-val {
         font-size: 2.3rem;
         font-weight: 900;
         color: #FFFFFF;
-        margin: 8px 0;
-        letter-spacing: -0.5px;
-    }
-    
-    /* 무역 카드 */
-    .trade-card {
-        background-color: #FFF5F7;
-        border: 1px solid #FECDD3;
-        border-left: 5px solid #FB7185;
-        border-radius: 12px;
-        padding: 18px;
-        margin-bottom: 15px;
     }
     </style>
 """,
@@ -146,13 +108,8 @@ CURRENCY_DATA = {
     "JPY": {"name": "Japanese Yen", "flag": "🇯🇵"},
     "CNY": {"name": "Chinese Yuan", "flag": "🇨🇳"},
     "GBP": {"name": "British Pound", "flag": "🇬🇧"},
-    "AUD": {"name": "Australian Dollar", "flag": "🇦🇺"},
-    "CAD": {"name": "Canadian Dollar", "flag": "🇨🇦"},
-    "SGD": {"name": "Singapore Dollar", "flag": "🇸🇬"},
-    "HKD": {"name": "Hong Kong Dollar", "flag": "🇭🇰"},
 }
 
-# 5. 세션 상태 초기화
 if "from_curr" not in st.session_state:
     st.session_state.from_curr = "USD"
 if "to_curr" not in st.session_state:
@@ -161,13 +118,7 @@ if "amount" not in st.session_state:
     st.session_state.amount = 10000.0
 
 
-def swap_currencies():
-    temp = st.session_state.from_curr
-    st.session_state.from_curr = st.session_state.to_curr
-    st.session_state.to_curr = temp
-
-
-# 6. 실시간 환율 API 호출 함수
+# 5. 환율 API 호출
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_api_rates(base="USD"):
     fallback_rates = {
@@ -177,15 +128,9 @@ def fetch_api_rates(base="USD"):
         "JPY": 153.40,
         "CNY": 6.72,
         "GBP": 0.74,
-        "AUD": 1.51,
-        "CAD": 1.36,
-        "SGD": 1.34,
-        "HKD": 7.81,
     }
-
     if not API_KEY or API_KEY in ["your_key", ""]:
-        return fallback_rates, "기본 환율 모드 (.env 키 미설정)", "Standby"
-
+        return fallback_rates, "기본 환율 모드 (.env 미설정)", "Standby"
     try:
         url = f"https://v6.exchangerate-api.com/v6/{API_KEY}/latest/{base}"
         res = requests.get(url, timeout=4)
@@ -212,50 +157,43 @@ def calculate_rate(f_sym, t_sym):
     return r_t / r_f
 
 
-# 7. 상단 글로벌 인디케이터 헤더
+# 6. 상단 인디케이터
 st.markdown(
     f"""
     <div class="top-status-bar">
         <div>
             <span class="live-pulse"></span>
-            <b>FX & TRADE PLATFORM</b> &nbsp;|&nbsp; <span>실시간 외환/무역 금융 분석 데스크</span>
+            <b>FX & TRADE EXECUTIVE DESK</b> &nbsp;|&nbsp; <span>해외소싱 수입원가 및 외환 리스크 통합 분석기</span>
         </div>
         <div>
-            상태: <b>{conn_status}</b> &nbsp;|&nbsp; 동기화 시각: <b>{last_updated}</b>
+            상태: <b>{conn_status}</b> &nbsp;|&nbsp; 데이터 기준: <b>{last_updated}</b>
         </div>
     </div>
 """,
     unsafe_allow_html=True,
 )
 
-# 8. 사이드바 - 확실한 선택 상태 뱃지 제공
+# 7. 사이드바
 with st.sidebar:
     st.markdown("### 📌 **Menu**")
     menu = st.radio(
         "메뉴 선택",
-        ["Dashboard", "환율 계산기", "환율 추이", "💼 Trade Calculator"],
+        ["💼 Trade Calculator", "Dashboard", "환율 계산기", "환율 추이"],
         label_visibility="collapsed",
     )
     st.markdown("---")
     st.markdown("#### ⭐ **자주 쓰는 통화쌍**")
-
-    # 현재 선택된 통화쌍을 세션 상태와 동기화된 라디오 버튼으로 표시 (선택 상태가 명확히 남음)
     preset_pairs = ["USD → KRW", "EUR → KRW", "JPY → KRW", "CNY → KRW"]
     current_pair_str = f"{st.session_state.from_curr} → {st.session_state.to_curr}"
     default_idx = (
         preset_pairs.index(current_pair_str)
         if current_pair_str in preset_pairs
-        else None
+        else 0
     )
 
     selected_preset = st.radio(
-        "통화쌍 프리셋 선택",
-        preset_pairs,
-        index=default_idx if default_idx is not None else 0,
-        label_visibility="collapsed",
+        "통화쌍 프리셋 선택", preset_pairs, index=default_idx
     )
-
-    # 사용자가 프리셋을 클릭하면 상태 즉시 변경
     f_code, t_code = selected_preset.split(" → ")
     if (
         st.session_state.from_curr != f_code
@@ -265,19 +203,257 @@ with st.sidebar:
         st.session_state.to_curr = t_code
         st.rerun()
 
-    # 현재 활성화된 통화쌍을 핑크 뱃지로 명시
     st.info(
         f"현재 적용 통화: **{st.session_state.from_curr} → {st.session_state.to_curr}**"
     )
 
 # ========================================================
-# [메뉴 1] DASHBOARD
+# [메뉴: 💼 Trade Calculator] - 실무용 대시보드로 전면 재편
 # ========================================================
-if menu == "Dashboard":
-    st.title("🌸 FX CALCULATOR")
-    st.caption("Real-time Exchange Rate & Financial Platform")
+if menu == "💼 Trade Calculator":
+    st.title("💼 무역 수입원가 분석 & FX 스트레스 테스트")
+    st.caption(
+        "수출입 실무 견적 작성, 품목별 관세율/Incoterms 조건 연동 및 환율 변동 시나리오 테이블을 제공합니다."
+    )
 
-    # 주요 5대 통화 카드
+    # 1. 상단: 빠른 템플릿 프리셋
+    p_col1, p_col2, p_col3 = st.columns([1.5, 1.5, 2])
+    with p_col1:
+        trade_preset = st.selectbox(
+            "📦 품목별 관세 프리셋",
+            [
+                "직접 입력",
+                "IT / 반도체 부품 (관세 0%)",
+                "산업용 기계류 (관세 8%)",
+                "소비재 / 잡화 (관세 13%)",
+                "의류 / 패션 (관세 13%)",
+            ],
+        )
+    with p_col2:
+        incoterms = st.selectbox(
+            "🚢 인도 조건 (Incoterms)",
+            [
+                "FOB (본선인도 - 운송비/보험료 별도)",
+                "CIF (운임보험료포함 - 공급가에 포함)",
+                "EXW (공장인도 - 내륙운송비 추가)",
+            ],
+        )
+    with p_col3:
+        st.write("")
+        st.caption("💡 선택한 품목과 무역 조건에 맞춰 관세율과 운임 항목이 자동 계산됩니다.")
+
+    # 프리셋에 따른 기본 관세율 자동 설정
+    preset_tariffs = {
+        "직접 입력": 8.0,
+        "IT / 반도체 부품 (관세 0%)": 0.0,
+        "산업용 기계류 (관세 8%)": 8.0,
+        "소비재 / 잡화 (관세 13%)": 13.0,
+        "의류 / 패션 (관세 13%)": 13.0,
+    }
+    default_tariff = preset_tariffs[trade_preset]
+
+    st.write("")
+
+    # 2. 본문 2단 구성: [좌: 상세 입력] | [우: 총괄 지표 및 시각화 카드]
+    left_side, right_side = st.columns([1, 1.3], gap="large")
+
+    with left_side:
+        st.subheader("📋 계약 및 운송 파라미터")
+        in_col1, in_col2 = st.columns(2)
+        with in_col1:
+            invoice_val = st.number_input(
+                "인보이스 물품 대금",
+                min_value=0.0,
+                value=10000.0,
+                step=1000.0,
+            )
+        with in_col2:
+            currency_sel = st.selectbox(
+                "결제 통화", ["USD", "EUR", "JPY", "CNY"], index=0
+            )
+
+        live_fx = calculate_rate(currency_sel, "KRW")
+        fx_col1, fx_col2 = st.columns(2)
+        with fx_col1:
+            applied_fx = st.number_input(
+                f"적용 환율 (1 {currency_sel}당 KRW)",
+                value=float(round(live_fx, 2)),
+                step=1.0,
+            )
+        with fx_col2:
+            custom_tariff = st.number_input(
+                "관세율 (%)",
+                min_value=0.0,
+                max_value=100.0,
+                value=default_tariff,
+                step=0.5,
+            )
+
+        ship_val = 0.0 if "CIF" in incoterms else 500.0
+        ship_input = st.number_input(
+            f"국제 운임 및 보험료 ({currency_sel})"
+            + (" [CIF 조건: 운임 포함]" if "CIF" in incoterms else ""),
+            min_value=0.0,
+            value=ship_val,
+            step=50.0,
+            disabled=("CIF" in incoterms),
+        )
+        misc_input = st.number_input(
+            "국내 통관 수수료 / 하역료 (KRW)",
+            min_value=0.0,
+            value=150000.0,
+            step=10000.0,
+        )
+
+        # 관세법상 정밀 산출
+        prod_krw = invoice_val * applied_fx
+        ship_krw = ship_input * applied_fx
+        cif_krw = prod_krw + ship_krw
+        duty_krw = cif_krw * (custom_tariff / 100.0)
+        vat_krw = (cif_krw + duty_krw) * 0.10  # 부가세 10%
+        final_total_krw = cif_krw + duty_krw + vat_krw + misc_input
+
+    with right_side:
+        st.subheader("📊 종합 수입원가 집계")
+
+        # 메인 하이라이트 배너
+        st.markdown(
+            f"""
+            <div class="total-banner">
+                <div class="total-title">총 예상 입고 원가 (Total Landed Cost)</div>
+                <div class="total-val">₩{final_total_krw:,.0f}</div>
+                <div style="font-size:0.85rem; color:#FFE4E6; margin-top:4px;">
+                    과세가격(CIF): ₩{cif_krw:,.0f} &nbsp;|&nbsp; 제세공과금 합계: ₩{(duty_krw + vat_krw):,.0f}
+                </div>
+            </div>
+        """,
+            unsafe_allow_html=True,
+        )
+
+        # 4대 핵심 비용 카드 그리드
+        m_c1, m_c2, m_c3, m_c4 = st.columns(4)
+        with m_c1:
+            st.markdown(
+                f"""<div class="cost-card"><div class="cost-title">물품 대금</div><div class="cost-val">₩{prod_krw:,.0f}</div></div>""",
+                unsafe_allow_html=True,
+            )
+        with m_c2:
+            st.markdown(
+                f"""<div class="cost-card"><div class="cost-title">국제 운임</div><div class="cost-val">₩{ship_krw:,.0f}</div></div>""",
+                unsafe_allow_html=True,
+            )
+        with m_c3:
+            st.markdown(
+                f"""<div class="cost-card"><div class="cost-title">관세 ({custom_tariff}%)</div><div class="cost-val">₩{duty_krw:,.0f}</div></div>""",
+                unsafe_allow_html=True,
+            )
+        with m_c4:
+            st.markdown(
+                f"""<div class="cost-card"><div class="cost-title">부가세 (10%)</div><div class="cost-val">₩{vat_krw:,.0f}</div></div>""",
+                unsafe_allow_html=True,
+            )
+
+        st.write("")
+        # 원가 구조 바 차트 (Streamlit 네이티브)
+        cost_breakdown_df = pd.DataFrame(
+            {
+                "비용 항목": [
+                    "물품 원화대금",
+                    "국제 운임",
+                    "관세",
+                    "부가세",
+                    "통관 부대비용",
+                ],
+                "금액(KRW)": [
+                    prod_krw,
+                    ship_krw,
+                    duty_krw,
+                    vat_krw,
+                    misc_input,
+                ],
+            }
+        ).set_index("비용 항목")
+        st.bar_chart(cost_breakdown_df, height=180)
+
+    st.markdown("---")
+
+    # 3. 하단 실무 기능: FX 스트레스 테스트 매트릭스 & CSV 다운로드
+    st.subheader("🔮 환율 변동 시나리오 스트레스 테스트 (FX Stress Test)")
+    st.caption("환율이 변동했을 때 최종 입고 원가와 원가 변동폭을 즉시 시뮬레이션합니다.")
+
+    steps = [-50, -30, -10, 0, 10, 30, 50]
+    sim_data = []
+    for diff in steps:
+        test_fx = applied_fx + diff
+        t_cif = (invoice_val + ship_input) * test_fx
+        t_duty = t_cif * (custom_tariff / 100.0)
+        t_vat = (t_cif + t_duty) * 0.10
+        t_total = t_cif + t_duty + t_vat + misc_input
+        cost_diff = t_total - final_total_krw
+        sim_data.append(
+            {
+                "시나리오": (
+                    f"환율 {diff:+d}원" if diff != 0 else "기준 환율 (현재)"
+                ),
+                "예상 환율 (KRW)": f"₩{test_fx:,.2f}",
+                "예상 총 원가 (KRW)": f"₩{t_total:,.0f}",
+                "원가 변동액 (KRW)": (
+                    f"{cost_diff:+,.0f}원" if diff != 0 else "-"
+                ),
+                "변동률 (%)": (
+                    f"{(cost_diff / final_total_krw) * 100:+.2f}%"
+                    if diff != 0
+                    else "-"
+                ),
+            }
+        )
+
+    sim_df = pd.DataFrame(sim_data)
+    st.dataframe(sim_df, use_container_width=True, hide_index=True)
+
+    # 4. 견적서 다운로드 버튼 (실무 보고용)
+    report_data = {
+        "항목": [
+            "인보이스 대금",
+            "결제 통화",
+            "적용 환율",
+            "국제 운임",
+            "관세율",
+            "관세액",
+            "수입 부가세",
+            "부대비용",
+            "총 예상 입고 원가",
+        ],
+        "내역": [
+            f"{invoice_val:,.2f}",
+            currency_sel,
+            f"{applied_fx:,.2f} KRW",
+            f"{ship_input:,.2f} {currency_sel}",
+            f"{custom_tariff}%",
+            f"{duty_krw:,.0f} KRW",
+            f"{vat_krw:,.0f} KRW",
+            f"{misc_input:,.0f} KRW",
+            f"{final_total_krw:,.0f} KRW",
+        ],
+    }
+    csv_bytes = (
+        pd.DataFrame(report_data).to_csv(index=False).encode("utf-8-sig")
+    )
+
+    st.download_button(
+        label="📥 수입 원가 견적 명세서(CSV) 다운로드",
+        data=csv_bytes,
+        file_name=f"Trade_Cost_Report_{datetime.date.today().strftime('%Y%m%d')}.csv",
+        mime="text/csv",
+    )
+
+# ========================================================
+# [메뉴: Dashboard]
+# ========================================================
+elif menu == "Dashboard":
+    st.title("🌸 FX DASHBOARD")
+    st.caption("실시간 인터뱅크 환율 데이터와 주요 5대 통화 시장 현황")
+
     cols = st.columns(5)
     majors = [
         ("USD", 0.31),
@@ -286,87 +462,40 @@ if menu == "Dashboard":
         ("CNY", 0.12),
         ("GBP", -0.42),
     ]
-
     for idx, (sym, delta) in enumerate(majors):
         with cols[idx]:
-            curr_rate = calculate_rate(sym, "KRW")
-            badge = "badge-up" if delta >= 0 else "badge-down"
-            icon = "▲" if delta >= 0 else "▼"
-            rate_disp = (curr_rate * 100) if sym == "JPY" else curr_rate
-            title_disp = f"{CURRENCY_DATA[sym]['flag']} {sym}/KRW" + (
-                "(100엔)" if sym == "JPY" else ""
-            )
-
-            st.markdown(
-                f"""
-                <div class="metric-card">
-                    <div class="metric-title">{title_disp}</div>
-                    <div class="metric-val">{rate_disp:,.2f}</div>
-                    <div><span class="{badge}">{icon} {abs(delta):.2f}%</span></div>
-                </div>
-            """,
-                unsafe_allow_html=True,
+            c_rate = calculate_rate(sym, "KRW")
+            r_disp = (c_rate * 100) if sym == "JPY" else c_rate
+            st.metric(
+                f"{CURRENCY_DATA[sym]['flag']} {sym}/KRW",
+                f"{r_disp:,.2f}",
+                f"{delta:+.2f}%",
             )
 
     st.write("")
-    c_left, c_right = st.columns([1.1, 1], gap="large")
-
-    with c_left:
-        st.subheader("⚡ 실시간 환전 계산기")
-        row1, row2, row3 = st.columns([5, 1, 5])
-        with row1:
-            from_sel = st.selectbox(
-                "FROM",
-                list(CURRENCY_DATA.keys()),
-                index=list(CURRENCY_DATA.keys()).index(
-                    st.session_state.from_curr
-                ),
-                format_func=lambda x: f"{CURRENCY_DATA[x]['flag']} {x} - {CURRENCY_DATA[x]['name']}",
-            )
-        with row2:
-            st.write("")
-            st.write("")
-            st.button("⇄", on_click=swap_currencies, use_container_width=True)
-        with row3:
-            to_sel = st.selectbox(
-                "TO",
-                list(CURRENCY_DATA.keys()),
-                index=list(CURRENCY_DATA.keys()).index(
-                    st.session_state.to_curr
-                ),
-                format_func=lambda x: f"{CURRENCY_DATA[x]['flag']} {x} - {CURRENCY_DATA[x]['name']}",
-            )
-
-        amt_input = st.number_input(
-            "금액",
-            min_value=0.0,
-            value=st.session_state.amount,
-            step=100.0,
-            format="%.2f",
+    d1, d2 = st.columns([1, 1.2], gap="large")
+    with d1:
+        st.subheader("⚡ 통화 간 환율 계산기")
+        amt_in = st.number_input(
+            "금액", value=st.session_state.amount, step=100.0
         )
-        st.session_state.amount = amt_input
-        st.session_state.from_curr = from_sel
-        st.session_state.to_curr = to_sel
-
-        applied_rate = calculate_rate(from_sel, to_sel)
-        calc_result = amt_input * applied_rate
+        st.session_state.amount = amt_in
+        active_r = calculate_rate(
+            st.session_state.from_curr, st.session_state.to_curr
+        )
+        converted = amt_in * active_r
 
         st.markdown(
             f"""
-            <div class="calc-display">
-                <div class="calc-subtext">적용 환율: 1 {from_sel} = {applied_rate:,.4f} {to_sel}</div>
-                <div class="calc-main-result">{calc_result:,.2f} {to_sel}</div>
-                <div class="calc-subtext">입력 금액: {amt_input:,.2f} {from_sel}</div>
+            <div class="total-banner">
+                <div class="total-title">적용 환율: 1 {st.session_state.from_curr} = {active_r:,.4f} {st.session_state.to_curr}</div>
+                <div class="total-val">{converted:,.2f} {st.session_state.to_curr}</div>
             </div>
         """,
             unsafe_allow_html=True,
         )
-
-        copy_val = f"{amt_input:,.2f} {from_sel} = {calc_result:,.2f} {to_sel}"
-        st.code(copy_val, language="text")
-
-    with c_right:
-        st.subheader("📈 USD / KRW 30일 환율 변동 추이")
+    with d2:
+        st.subheader("📈 USD / KRW 30일 변동 추이")
         base_val = rates.get("KRW", 1338.80)
         dates = [
             datetime.date.today() - datetime.timedelta(days=i)
@@ -377,183 +506,60 @@ if menu == "Dashboard":
             for i in range(len(dates))
         ]
         df_chart = pd.DataFrame({"USD/KRW": rates_trend}, index=dates)
-        st.line_chart(df_chart, height=260)
-
-        m1, m2, m3 = st.columns(3)
-        m1.metric("최고 환율", f"₩{max(rates_trend):,.2f}")
-        m2.metric("최저 환율", f"₩{min(rates_trend):,.2f}")
-        diff_30d = rates_trend[-1] - rates_trend[0]
-        m3.metric("30일 변동폭", f"{diff_30d:+,.2f}원")
+        st.line_chart(df_chart, height=240)
 
 # ========================================================
-# [메뉴 2] 환율 계산기
+# [메뉴: 환율 계산기 & 추이]
 # ========================================================
 elif menu == "환율 계산기":
     st.title("💱 전문 통화 간 환율 계산기")
-    b1, b2, b3 = st.columns([5, 1, 5])
-    with b1:
-        f_curr = st.selectbox(
-            "FROM 통화",
+    c1, c2 = st.columns(2)
+    with c1:
+        f_cur = st.selectbox(
+            "보내는 통화",
             list(CURRENCY_DATA.keys()),
             index=list(CURRENCY_DATA.keys()).index(st.session_state.from_curr),
-            format_func=lambda x: f"{CURRENCY_DATA[x]['flag']} {x} - {CURRENCY_DATA[x]['name']}",
         )
-        in_amt = st.number_input(
-            "입력 금액",
-            min_value=0.0,
-            value=st.session_state.amount,
-            format="%.2f",
+        calc_amt = st.number_input(
+            "금액 입력", value=st.session_state.amount, format="%.2f"
         )
-    with b2:
-        st.write("")
-        st.write("")
-        st.button("⇄", on_click=swap_currencies, use_container_width=True)
-    with b3:
-        t_curr = st.selectbox(
-            "TO 통화",
+    with c2:
+        t_cur = st.selectbox(
+            "받는 통화",
             list(CURRENCY_DATA.keys()),
             index=list(CURRENCY_DATA.keys()).index(st.session_state.to_curr),
-            format_func=lambda x: f"{CURRENCY_DATA[x]['flag']} {x} - {CURRENCY_DATA[x]['name']}",
         )
-
-    st.session_state.from_curr = f_curr
-    st.session_state.to_curr = t_curr
-    st.session_state.amount = in_amt
-
-    rate_val = calculate_rate(f_curr, t_curr)
-    total_val = in_amt * rate_val
-
+    r_val = calculate_rate(f_cur, t_cur)
     st.markdown(
         f"""
-        <div class="calc-display">
-            <div class="calc-subtext">1 {f_curr} = {rate_val:,.4f} {t_curr}</div>
-            <div class="calc-main-result">{total_val:,.2f} {t_curr}</div>
-            <div class="calc-subtext">환산 기준: {in_amt:,.2f} {f_curr}</div>
+        <div class="total-banner">
+            <div class="total-title">1 {f_cur} = {r_val:,.4f} {t_cur}</div>
+            <div class="total-val">{calc_amt * r_val:,.2f} {t_cur}</div>
         </div>
     """,
         unsafe_allow_html=True,
     )
 
-# ========================================================
-# [메뉴 3] 환율 추이
-# ========================================================
 elif menu == "환율 추이":
     st.title("📊 통화별 환율 추이 분석")
-    t_c1, t_c2 = st.columns([2, 1])
-    with t_c1:
-        target_pair = st.selectbox(
-            "조회 통화쌍 (기준: USD)", ["KRW", "EUR", "JPY", "CNY", "GBP"]
-        )
-    with t_c2:
-        days_range = st.selectbox(
-            "기간", [7, 30, 90], index=1, format_func=lambda x: f"{x}일"
-        )
-
-    cur_val = calculate_rate("USD", target_pair)
-    dates_list = [
+    tgt = st.selectbox("조회 통화 (USD 기준)", ["KRW", "EUR", "JPY", "CNY", "GBP"])
+    cur_v = calculate_rate("USD", tgt)
+    d_list = [
         datetime.date.today() - datetime.timedelta(days=i)
-        for i in range(days_range, -1, -1)
+        for i in range(30, -1, -1)
     ]
-    trend_vals = [
-        round(cur_val + (math.sin(i / 2.5) * (cur_val * 0.008)), 4)
-        for i in range(len(dates_list))
+    t_vals = [
+        round(cur_v + (math.sin(i / 2.5) * (cur_v * 0.008)), 4)
+        for i in range(len(d_list))
     ]
-    df_trend = pd.DataFrame(
-        {f"USD/{target_pair}": trend_vals}, index=dates_list
-    )
-    st.line_chart(df_trend, height=350)
+    st.line_chart(pd.DataFrame({f"USD/{tgt}": t_vals}, index=d_list), height=350)
 
-# ========================================================
-# [메뉴 4] 무역 계산기 & 시뮬레이션
-# ========================================================
-elif menu == "💼 Trade Calculator":
-    st.title("💼 무역 거래 비용 계산기 & 환율 시뮬레이터")
-    st.caption("해외 구매 및 수출입 실무에서 통관 원가와 환위험 노출액을 즉각 산출합니다.")
-
-    tc1, tc2 = st.columns(2, gap="large")
-    with tc1:
-        st.subheader("📋 계약 및 수입 정보 입력")
-        goods_cost = st.number_input(
-            "상품 인보이스 금액", min_value=0.0, value=10000.0, step=1000.0
-        )
-        curr_choice = st.selectbox(
-            "결제 통화", ["USD", "EUR", "JPY", "CNY"], index=0
-        )
-
-        auto_rate = calculate_rate(curr_choice, "KRW")
-        trade_rate = st.number_input(
-            f"적용 환율 (1 {curr_choice} 당 원화)",
-            value=float(round(auto_rate, 2)),
-        )
-        freight_cost = st.number_input(
-            f"국제 운송비 ({curr_choice})", min_value=0.0, value=500.0, step=100.0
-        )
-        tariff_rate = st.number_input(
-            "관세율 (%)", min_value=0.0, max_value=100.0, value=8.0, step=0.5
-        )
-        extra_krw = st.number_input(
-            "기타 국내 통관/운송 부대비용 (KRW)", min_value=0.0, value=0.0
-        )
-
-        goods_krw = goods_cost * trade_rate
-        freight_krw = freight_cost * trade_rate
-        cif_krw = goods_krw + freight_krw
-        tariff_krw = cif_krw * (tariff_rate / 100.0)
-        vat_krw = (cif_krw + tariff_krw) * 0.10
-        total_trade_cost = cif_krw + tariff_krw + vat_krw + extra_krw
-
-    with tc2:
-        st.subheader("🏷️ 수입 원가 정산 내역")
-        st.markdown(
-            f"""
-            <div class="trade-card">
-                <p>• <b>상품 원화 금액:</b> ₩{goods_krw:,.0f}</p>
-                <p>• <b>국제 운송비:</b> ₩{freight_krw:,.0f}</p>
-                <p>• <b>과세가격 (CIF 기준):</b> ₩{cif_krw:,.0f}</p>
-                <p>• <b>예상 관세 ({tariff_rate}%):</b> ₩{tariff_krw:,.0f}</p>
-                <p>• <b>수입 부가세 (10%):</b> ₩{vat_krw:,.0f}</p>
-                <hr style="margin: 8px 0; border: 0; border-top: 1px solid #FECDD3;">
-                <h4 style="color:#9F1239; margin:0;">총 예상 원가: ₩{total_trade_cost:,.0f}</h4>
-            </div>
-        """,
-            unsafe_allow_html=True,
-        )
-
-        st.write("")
-        st.subheader("🔮 환율 변동 시뮬레이션")
-        expected_rate = st.number_input(
-            "결제 시점 예상 환율 (KRW)",
-            value=float(round(trade_rate * 1.03, 2)),
-            step=1.0,
-        )
-
-        base_settle = (goods_cost + freight_cost) * trade_rate
-        exp_settle = (goods_cost + freight_cost) * expected_rate
-        diff_fx = exp_settle - base_settle
-        diff_rate_pct = ((expected_rate - trade_rate) / trade_rate) * 100.0
-
-        color_fx = "#E11D48" if diff_fx > 0 else "#2563EB"
-        sign_fx = "+" if diff_fx > 0 else ""
-
-        st.markdown(
-            f"""
-            <div style="background-color: #FFFFFF; border: 1px solid #FFE4E6; padding: 16px; border-radius: 12px; box-shadow: 0 2px 8px rgba(244,63,94,0.05);">
-                <div>기준 환율 결제 원가: <b>₩{base_settle:,.0f}</b></div>
-                <div>예상 환율 결제 원가: <b>₩{exp_settle:,.0f}</b></div>
-                <div style="font-size: 1.15rem; margin-top: 8px; font-weight: 800; color: {color_fx};">
-                    환율 변동 영향: {sign_fx}₩{diff_fx:,.0f} ({sign_fx}{diff_rate_pct:.2f}%)
-                </div>
-            </div>
-        """,
-            unsafe_allow_html=True,
-        )
-
-# 9. 하단 푸터
+# 8. 푸터
 st.markdown("---")
 st.markdown(
     """
     <div style="text-align: center; color: #FB7185; font-size: 0.8rem; font-weight: 500;">
-        🌸 Soft Pink FX Platform & Trade Analysis Desk © 2026. Powered by Streamlit.
+        🌸 Executive FX & Trade Platform © 2026. Powered by Streamlit.
     </div>
 """,
     unsafe_allow_html=True,
