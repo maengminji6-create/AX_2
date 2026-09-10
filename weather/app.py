@@ -160,23 +160,24 @@ if not API_KEY or API_KEY == "your_key":
     st.stop()
 
 # --------------------------------------------------
-# 3. 권역 정의 (새 SVG 지형 좌표에 100% 밀착 교정)
+# 3. 권역 정의 (울릉도/독도 명확 분리 및 신규 한반도 정밀 좌표)
 # --------------------------------------------------
 REGION_SPECS = {
-    "서해5도": {"en": "Incheon", "top": "24%", "left": "14%"},
-    "서울":     {"en": "Seoul", "top": "22%", "left": "36%"},
-    "경기":     {"en": "Suwon", "top": "29%", "left": "38%"},
-    "영서":     {"en": "Chuncheon", "top": "16%", "left": "53%"},
-    "영동":     {"en": "Gangneung", "top": "20%", "left": "74%"},
-    "울릉독도": {"en": "Ulleungdo", "top": "25%", "left": "89%"},
-    "충남":     {"en": "Daejeon", "top": "43%", "left": "33%"},
-    "충북":     {"en": "Cheongju", "top": "36%", "left": "51%"},
-    "경북":     {"en": "Andong", "top": "41%", "left": "72%"},
-    "전북":     {"en": "Jeonju", "top": "54%", "left": "40%"},
-    "경남":     {"en": "Changwon", "top": "62%", "left": "65%"},
-    "부산":     {"en": "Busan", "top": "66%", "left": "78%"},
-    "전남":     {"en": "Gwangju", "top": "69%", "left": "34%"},
-    "제주도":   {"en": "Jeju", "top": "89%", "left": "33%"}
+    "서해5도": {"en": "Incheon", "top": "24%", "left": "12%"},
+    "서울":     {"en": "Seoul", "top": "20%", "left": "33%"},
+    "경기":     {"en": "Suwon", "top": "27%", "left": "36%"},
+    "영서":     {"en": "Chuncheon", "top": "17%", "left": "51%"},
+    "영동":     {"en": "Gangneung", "top": "21%", "left": "70%"},
+    "울릉도":   {"en": "Ulleungdo", "top": "25%", "left": "83%"},
+    "독도":     {"en": "Dokdo", "top": "30%", "left": "93%"},
+    "충남":     {"en": "Daejeon", "top": "41%", "left": "31%"},
+    "충북":     {"en": "Cheongju", "top": "36%", "left": "49%"},
+    "경북":     {"en": "Andong", "top": "42%", "left": "68%"},
+    "전북":     {"en": "Jeonju", "top": "54%", "left": "37%"},
+    "경남":     {"en": "Changwon", "top": "62%", "left": "62%"},
+    "부산":     {"en": "Busan", "top": "65%", "left": "76%"},
+    "전남":     {"en": "Gwangju", "top": "69%", "left": "32%"},
+    "제주도":   {"en": "Jeju", "top": "89%", "left": "32%"}
 }
 
 def get_kma_emoji(icon_code: str) -> str:
@@ -194,7 +195,7 @@ def get_kma_emoji(icon_code: str) -> str:
     return mapping.get(icon_code, "⛅")
 
 # --------------------------------------------------
-# 4. API 캐싱 수신 함수
+# 4. API 수신 캐싱 함수
 # --------------------------------------------------
 @st.cache_data(ttl=600)
 def fetch_weather_by_city(city_en: str):
@@ -202,6 +203,10 @@ def fetch_weather_by_city(city_en: str):
     params = {"q": city_en, "appid": API_KEY, "units": "metric", "lang": "kr"}
     try:
         res = requests.get(url, params=params, timeout=5)
+        # 독도(Dokdo) 영문 쿼리가 매핑되지 않을 경우 울릉도 기상으로 안전 보정
+        if res.status_code != 200 and city_en.lower() == "dokdo":
+            params["q"] = "Ulleungdo"
+            res = requests.get(url, params=params, timeout=5)
         return res.json() if res.status_code == 200 else None
     except:
         return None
@@ -212,6 +217,9 @@ def fetch_forecast_by_city(city_en: str, unit: str):
     params = {"q": city_en, "appid": API_KEY, "units": unit, "lang": "kr"}
     try:
         res = requests.get(url, params=params, timeout=5)
+        if res.status_code != 200 and city_en.lower() == "dokdo":
+            params["q"] = "Ulleungdo"
+            res = requests.get(url, params=params, timeout=5)
         return res.json() if res.status_code == 200 else None
     except:
         return None
@@ -254,7 +262,7 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # --------------------------------------------------
-# 6. 본문 2열 레이아웃
+# 6. 본문 2열 레이아웃 (좌: 정밀 한반도도, 우: 브리핑)
 # --------------------------------------------------
 col_map, col_detail = st.columns([11, 13], gap="large")
 
@@ -288,7 +296,7 @@ with col_map:
 
         badges_html = "".join(badges_elements)
 
-        # 기상청 실루엣 1:1 정밀 벡터 한반도 지도 (동남권 및 호남 해안선 복원)
+        # 기상청 실시간 지상관측도용 한반도 정밀 벡터
         map_board_html = f"""
         <!DOCTYPE html>
         <html>
@@ -344,7 +352,7 @@ with col_map:
                 z-index: 10;
             }}
             .region-title {{
-                font-size: 12px;
+                font-size: 11.5px;
                 font-weight: 800;
                 color: #0f172a;
                 margin-bottom: 2px;
@@ -352,26 +360,26 @@ with col_map:
                 letter-spacing: -0.3px;
             }}
             .region-icon {{
-                font-size: 25px;
+                font-size: 24px;
                 line-height: 1.1;
                 filter: drop-shadow(0 2px 4px rgba(0,0,0,0.15));
             }}
             .region-badge {{
                 background: rgba(255, 255, 255, 0.95);
-                padding: 2px 7px;
+                padding: 2px 6px;
                 border-radius: 12px;
                 box-shadow: 0 2px 5px rgba(15, 23, 42, 0.12);
                 border: 1px solid rgba(226, 232, 240, 0.8);
                 display: flex;
                 align-items: center;
-                gap: 3px;
-                font-size: 11px;
+                gap: 2px;
+                font-size: 10.5px;
                 font-weight: 800;
                 margin-top: 2px;
                 white-space: nowrap;
             }}
             .temp-val {{ color: #0f172a; }}
-            .divider {{ color: #94a3b8; font-size: 10px; }}
+            .divider {{ color: #94a3b8; font-size: 9px; }}
             .rain-val {{ color: #0284c7; }}
             .map-legend {{
                 position: absolute;
@@ -394,38 +402,56 @@ with col_map:
                     <span style="color: #38bdf8; font-size: 12px;">기상청 지상관측 통보문</span>
                 </div>
                 <div class="weather-map-board">
-                    <svg class="korea-svg-bg" viewBox="0 0 500 550" preserveAspectRatio="none">
+                    <svg class="korea-svg-bg" viewBox="0 0 520 560" preserveAspectRatio="none">
                         <defs>
                             <filter id="kma-shadow" x="-20%" y="-20%" width="140%" height="140%">
-                                <feDropShadow dx="9" dy="14" stdDeviation="6" flood-color="#0f2b5c" flood-opacity="0.25"/>
+                                <feDropShadow dx="8" dy="12" stdDeviation="5" flood-color="#0f2b5c" flood-opacity="0.25"/>
                             </filter>
                         </defs>
-                        <!-- 서해5도 (백령도) -->
-                        <ellipse cx="70" cy="132" rx="14" ry="7" fill="#ffffff" filter="url(#kma-shadow)"/>
                         
-                        <!-- ★ 한반도 본토 지형: 동남해안(부산/경남) 및 남서해안(전남)을 완전히 감싸안도록 정밀 확장 -->
-                        <path d="M 180,45 
-                                 C 215,40 240,55 255,75 
-                                 C 285,90 330,105 355,135 
-                                 C 345,180 355,215 375,240
-                                 C 385,270 380,310 395,350
-                                 C 405,370 415,385 410,410
-                                 C 400,430 380,445 350,440
-                                 C 320,435 295,445 260,440
-                                 C 220,435 190,445 155,440
-                                 C 135,435 125,410 135,380
-                                 C 145,350 140,320 150,290
-                                 C 135,270 120,250 125,220
-                                 C 130,195 140,175 145,150
-                                 C 150,120 165,85 180,45 Z" 
+                        <!-- 서해5도 (백령도) -->
+                        <ellipse cx="65" cy="135" rx="14" ry="7" fill="#ffffff" filter="url(#kma-shadow)"/>
+                        
+                        <!-- 한반도 남한 본토 정밀 지형 (동해안, 호미곶, 부산포, 남해안 다도해, 태안반도 재현) -->
+                        <path d="M 160,50 
+                                 L 230,48 
+                                 L 255,60 
+                                 L 285,75 
+                                 L 330,105 
+                                 C 350,125 365,165 360,200 
+                                 C 358,225 368,245 378,265
+                                 L 395,305 
+                                 C 405,325 410,335 412,350
+                                 C 415,365 415,375 400,388
+                                 L 390,398 
+                                 C 382,410 375,418 360,422
+                                 L 335,426 
+                                 C 310,428 295,432 270,428
+                                 L 235,430 
+                                 C 200,432 175,438 150,430
+                                 L 140,410 
+                                 L 148,380 
+                                 L 155,340 
+                                 L 150,300 
+                                 L 128,270 
+                                 L 115,245 
+                                 L 125,225 
+                                 L 142,210 
+                                 L 148,175 
+                                 L 138,150 
+                                 L 148,110 
+                                 L 155,80 Z" 
                               fill="#ffffff" filter="url(#kma-shadow)"/>
                         
                         <!-- 제주도 -->
-                        <ellipse cx="165" cy="490" rx="38" ry="18" fill="#ffffff" filter="url(#kma-shadow)"/>
+                        <ellipse cx="165" cy="495" rx="38" ry="18" fill="#ffffff" filter="url(#kma-shadow)"/>
                         
-                        <!-- 울릉도 / 독도 -->
-                        <circle cx="445" cy="140" r="10" fill="#ffffff" filter="url(#kma-shadow)"/>
-                        <circle cx="470" cy="148" r="4.5" fill="#ffffff" filter="url(#kma-shadow)"/>
+                        <!-- 울릉도 본섬 -->
+                        <path d="M 425,140 C 428,135 438,133 442,138 C 445,142 443,148 438,150 C 432,152 423,148 425,140 Z" fill="#ffffff" filter="url(#kma-shadow)"/>
+                        
+                        <!-- 독도 (동도/서도 분리 형태) -->
+                        <circle cx="482" cy="168" r="4.5" fill="#ffffff" filter="url(#kma-shadow)"/>
+                        <circle cx="489" cy="172" r="3.5" fill="#ffffff" filter="url(#kma-shadow)"/>
                     </svg>
                     {badges_html}
                     <div class="map-legend">기온℃ / 강수량mm</div>
@@ -439,7 +465,8 @@ with col_map:
 with col_detail:
     c_sub1, c_sub2, c_sub3 = st.columns([1.5, 1, 1.2])
     with c_sub1:
-        selected_region = st.selectbox("🎯 관측 지점 선택", options=list(REGION_SPECS.keys()), index=11)
+        # 울릉도, 독도를 포함한 전 지역 개별 선택 가능
+        selected_region = st.selectbox("🎯 관측 지점 선택", options=list(REGION_SPECS.keys()), index=12)
         target_en = REGION_SPECS[selected_region]["en"]
     with c_sub2:
         unit_label = st.selectbox("온도 단위", ["섭씨 (°C)", "화씨 (°F)"])
