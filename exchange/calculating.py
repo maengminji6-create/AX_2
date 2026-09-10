@@ -208,7 +208,7 @@ with st.sidebar:
     st.markdown("### 📌 **Menu**")
     menu = st.radio(
         "메뉴 선택",
-        ["💼 Trade Calculator", "Dashboard", "환율 계산기", "환율 추이"],
+        ["Dashboard", "환율 계산기", "환율 추이", "💼 Trade Calculator"],
         label_visibility="collapsed",
     )
     st.markdown("---")
@@ -238,9 +238,122 @@ with st.sidebar:
     )
 
 # ========================================================
+# [메뉴: Dashboard]
+# ========================================================
+if menu == "Dashboard":
+    st.title("🌸 FX DASHBOARD")
+    st.caption("실시간 인터뱅크 환율 데이터와 주요 5대 통화 시장 현황")
+
+    cols = st.columns(5)
+    majors = [
+        ("USD", 0.31),
+        ("EUR", -0.15),
+        ("JPY", 0.08),
+        ("CNY", 0.12),
+        ("GBP", -0.42),
+    ]
+    for idx, (sym, delta) in enumerate(majors):
+        with cols[idx]:
+            c_rate = calculate_rate(sym, "KRW")
+            r_disp = (c_rate * 100) if sym == "JPY" else c_rate
+            st.metric(
+                f"{CURRENCY_DATA[sym]['flag']} {sym}/KRW",
+                f"{r_disp:,.2f}",
+                f"{delta:+.2f}%",
+            )
+
+    st.write("")
+    d1, d2 = st.columns([1, 1.2], gap="large")
+    with d1:
+        st.subheader("⚡ 통화 간 환율 계산기")
+        amt_in = st.number_input(
+            "금액", value=st.session_state.amount, step=100.0
+        )
+        st.session_state.amount = amt_in
+        active_r = calculate_rate(
+            st.session_state.from_curr, st.session_state.to_curr
+        )
+        converted = amt_in * active_r
+
+        st.markdown(
+            f"""
+            <div class="total-banner">
+                <div class="total-title">적용 환율: 1 {st.session_state.from_curr} = {active_r:,.4f} {st.session_state.to_curr}</div>
+                <div class="total-val">{converted:,.2f} {st.session_state.to_curr}</div>
+            </div>
+        """,
+            unsafe_allow_html=True,
+        )
+    with d2:
+        st.subheader("📈 USD / KRW 30일 변동 추이")
+        base_val = rates.get("KRW", 1338.80)
+        dates = [
+            datetime.date.today() - datetime.timedelta(days=i)
+            for i in range(30, -1, -1)
+        ]
+        rates_trend = [
+            round(base_val + (math.sin(i / 3.0) * 10.0) - ((i % 4) * 1.2), 2)
+            for i in range(len(dates))
+        ]
+        df_chart = pd.DataFrame({"USD/KRW": rates_trend}, index=dates)
+        # 로즈 핑크 컬러 적용
+        st.line_chart(df_chart, height=240, color="#F43F5E")
+
+# ========================================================
+# [메뉴: 환율 계산기]
+# ========================================================
+elif menu == "환율 계산기":
+    st.title("💱 전문 통화 간 환율 계산기")
+    c1, c2 = st.columns(2)
+    with c1:
+        f_cur = st.selectbox(
+            "보내는 통화",
+            list(CURRENCY_DATA.keys()),
+            index=list(CURRENCY_DATA.keys()).index(st.session_state.from_curr),
+        )
+        calc_amt = st.number_input(
+            "금액 입력", value=st.session_state.amount, format="%.2f"
+        )
+    with c2:
+        t_cur = st.selectbox(
+            "받는 통화",
+            list(CURRENCY_DATA.keys()),
+            index=list(CURRENCY_DATA.keys()).index(st.session_state.to_curr),
+        )
+    r_val = calculate_rate(f_cur, t_cur)
+    st.markdown(
+        f"""
+        <div class="total-banner">
+            <div class="total-title">1 {f_cur} = {r_val:,.4f} {t_cur}</div>
+            <div class="total-val">{calc_amt * r_val:,.2f} {t_cur}</div>
+        </div>
+    """,
+        unsafe_allow_html=True,
+    )
+
+# ========================================================
+# [메뉴: 환율 추이]
+# ========================================================
+elif menu == "환율 추이":
+    st.title("📊 통화별 환율 추이 분석")
+    tgt = st.selectbox("조회 통화 (USD 기준)", ["KRW", "EUR", "JPY", "CNY", "GBP"])
+    cur_v = calculate_rate("USD", tgt)
+    d_list = [
+        datetime.date.today() - datetime.timedelta(days=i)
+        for i in range(30, -1, -1)
+    ]
+    t_vals = [
+        round(cur_v + (math.sin(i / 2.5) * (cur_v * 0.008)), 4)
+        for i in range(len(d_list))
+    ]
+    df_trend = pd.DataFrame({f"USD/{tgt}": t_vals}, index=d_list)
+    # 로즈 핑크 컬러 적용
+    st.line_chart(df_trend, height=350, color="#F43F5E")
+
+# ========================================================
 # [메뉴: 💼 Trade Calculator]
 # ========================================================
-if menu == "💼 Trade Calculator":
+elif menu == "💼 Trade Calculator":
     st.title("💼 무역 수입원가 분석 & FX 스트레스 테스트")
     st.caption(
         "수출입 실무 견적 작성, 품목별 관세율/Incoterms 조건 연동 및 환율 변동 시나리오 테이블을 제공합니다."
@@ -379,7 +492,6 @@ if menu == "💼 Trade Calculator":
 
         st.write("")
 
-        # Streamlit Markdown 줄바꿈/들여쓰기 버그를 원천 차단한 안전 한 줄 HTML 생성
         items = [
             ("물품 원화대금", prod_krw, "linear-gradient(90deg, #F43F5E, #FB7185)"),
             ("수입 부가세 (10%)", vat_krw, "linear-gradient(90deg, #FB7185, #FDA4AF)"),
@@ -467,113 +579,6 @@ if menu == "💼 Trade Calculator":
         file_name=f"Trade_Cost_Report_{datetime.date.today().strftime('%Y%m%d')}.csv",
         mime="text/csv",
     )
-
-# ========================================================
-# [메뉴: Dashboard]
-# ========================================================
-elif menu == "Dashboard":
-    st.title("🌸 FX DASHBOARD")
-    st.caption("실시간 인터뱅크 환율 데이터와 주요 5대 통화 시장 현황")
-
-    cols = st.columns(5)
-    majors = [
-        ("USD", 0.31),
-        ("EUR", -0.15),
-        ("JPY", 0.08),
-        ("CNY", 0.12),
-        ("GBP", -0.42),
-    ]
-    for idx, (sym, delta) in enumerate(majors):
-        with cols[idx]:
-            c_rate = calculate_rate(sym, "KRW")
-            r_disp = (c_rate * 100) if sym == "JPY" else c_rate
-            st.metric(
-                f"{CURRENCY_DATA[sym]['flag']} {sym}/KRW",
-                f"{r_disp:,.2f}",
-                f"{delta:+.2f}%",
-            )
-
-    st.write("")
-    d1, d2 = st.columns([1, 1.2], gap="large")
-    with d1:
-        st.subheader("⚡ 통화 간 환율 계산기")
-        amt_in = st.number_input(
-            "금액", value=st.session_state.amount, step=100.0
-        )
-        st.session_state.amount = amt_in
-        active_r = calculate_rate(
-            st.session_state.from_curr, st.session_state.to_curr
-        )
-        converted = amt_in * active_r
-
-        st.markdown(
-            f"""
-            <div class="total-banner">
-                <div class="total-title">적용 환율: 1 {st.session_state.from_curr} = {active_r:,.4f} {st.session_state.to_curr}</div>
-                <div class="total-val">{converted:,.2f} {st.session_state.to_curr}</div>
-            </div>
-        """,
-            unsafe_allow_html=True,
-        )
-    with d2:
-        st.subheader("📈 USD / KRW 30일 변동 추이")
-        base_val = rates.get("KRW", 1338.80)
-        dates = [
-            datetime.date.today() - datetime.timedelta(days=i)
-            for i in range(30, -1, -1)
-        ]
-        rates_trend = [
-            round(base_val + (math.sin(i / 3.0) * 10.0) - ((i % 4) * 1.2), 2)
-            for i in range(len(dates))
-        ]
-        df_chart = pd.DataFrame({"USD/KRW": rates_trend}, index=dates)
-        st.line_chart(df_chart, height=240)
-
-# ========================================================
-# [메뉴: 환율 계산기 & 추이]
-# ========================================================
-elif menu == "환율 계산기":
-    st.title("💱 전문 통화 간 환율 계산기")
-    c1, c2 = st.columns(2)
-    with c1:
-        f_cur = st.selectbox(
-            "보내는 통화",
-            list(CURRENCY_DATA.keys()),
-            index=list(CURRENCY_DATA.keys()).index(st.session_state.from_curr),
-        )
-        calc_amt = st.number_input(
-            "금액 입력", value=st.session_state.amount, format="%.2f"
-        )
-    with c2:
-        t_cur = st.selectbox(
-            "받는 통화",
-            list(CURRENCY_DATA.keys()),
-            index=list(CURRENCY_DATA.keys()).index(st.session_state.to_curr),
-        )
-    r_val = calculate_rate(f_cur, t_cur)
-    st.markdown(
-        f"""
-        <div class="total-banner">
-            <div class="total-title">1 {f_cur} = {r_val:,.4f} {t_cur}</div>
-            <div class="total-val">{calc_amt * r_val:,.2f} {t_cur}</div>
-        </div>
-    """,
-        unsafe_allow_html=True,
-    )
-
-elif menu == "환율 추이":
-    st.title("📊 통화별 환율 추이 분석")
-    tgt = st.selectbox("조회 통화 (USD 기준)", ["KRW", "EUR", "JPY", "CNY", "GBP"])
-    cur_v = calculate_rate("USD", tgt)
-    d_list = [
-        datetime.date.today() - datetime.timedelta(days=i)
-        for i in range(30, -1, -1)
-    ]
-    t_vals = [
-        round(cur_v + (math.sin(i / 2.5) * (cur_v * 0.008)), 4)
-        for i in range(len(d_list))
-    ]
-    st.line_chart(pd.DataFrame({f"USD/{tgt}": t_vals}, index=d_list), height=350)
 
 # 8. 푸터
 st.markdown("---")
