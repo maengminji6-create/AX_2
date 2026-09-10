@@ -1,7 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as components
-import numpy as np
-import matplotlib.pyplot as plt
 
 # ---------------------------------------------------------
 # 1. 페이지 설정 및 세련된 연두/민트(Light Green & Mint) 스타일링
@@ -457,7 +454,7 @@ if st.session_state.step == "home":
             <p style="color: #4B5563; line-height: 1.75; max-width: 540px; margin: 0 auto 32px auto; text-align: center; font-size: 0.96rem;">
             신용장(L/C), 포워더 선복 부킹, 통관 규제, 원가 네고 등<br>
             실제 무역 현장의 20가지 딜레마를 분석하여<br>
-            <b>최적 직무(1위)와 확장 직무(2·3위)</b>, 그리고 <b>MBTI 4축 레이더 분석</b>을 도출합니다.
+            <b>최적 직무(1위)와 확장 직무(2·3위)</b>, 그리고 <b>MBTI 4축 분석 리포트</b>를 도출합니다.
             </p>
             """,
             unsafe_allow_html=True
@@ -524,6 +521,7 @@ elif st.session_state.step == "test":
 # 7. PAGE 03 & 04 — RESULT
 # ---------------------------------------------------------
 elif st.session_state.step == "result":
+    # 빵빠레 효과 연출
     st.balloons()
 
     scores = st.session_state.scores
@@ -542,6 +540,7 @@ elif st.session_state.step == "result":
         score_pct = max(score_pct, 48)
         normalized_scores[job] = score_pct
 
+    # MBTI 4대 지표 비율 산출
     e_ratio = int((mbti_counts["E"] / 5) * 100)
     s_ratio = int((mbti_counts["S"] / 5) * 100)
     t_ratio = int((mbti_counts["T"] / 5) * 100)
@@ -555,98 +554,48 @@ elif st.session_state.step == "result":
 
     # [1] 1순위 대표 직무 카드
     with st.container(border=True):
+        st.markdown('<p style="text-align: center; letter-spacing: 0.15em; font-weight: 700; color: #059669; font-size: 0.85rem; margin: 0 0 6px 0;">✦ YOUR BEST TRADE TYPE ✦</p>', unsafe_allow_html=True)
+        st.markdown(f'<div style="text-align: center; font-size: 3.4rem; margin: 4px 0;">{top_job_meta["icon"]}</div>', unsafe_allow_html=True)
+        st.markdown(f'<h1 style="text-align: center; font-size: 2.1rem; color: #064E3B; margin: 0 0 4px 0;">{top1_name}형 ({mbti_res})</h1>', unsafe_allow_html=True)
+        st.markdown(f'<p style="text-align: center; color: #4B5563; font-weight: 600; font-size: 1.05rem; margin-bottom: 20px;">"{top_job_meta["tagline"]}"</p>', unsafe_allow_html=True)
+        
         st.markdown(
             f"""
-            <div id="capture-area" style="background-color: #FFFFFF; padding: 20px; border-radius: 12px;">
-                <p style="text-align: center; letter-spacing: 0.15em; font-weight: 700; color: #059669; font-size: 0.85rem; margin: 0 0 6px 0;">✦ YOUR BEST TRADE TYPE ✦</p>
-                <div style="text-align: center; font-size: 3.4rem; margin: 4px 0;">{top_job_meta["icon"]}</div>
-                <h1 style="text-align: center; font-size: 2.1rem; color: #064E3B; margin: 0 0 4px 0;">{top1_name}형 ({mbti_res})</h1>
-                <p style="text-align: center; color: #4B5563; font-weight: 600; font-size: 1.05rem; margin-bottom: 20px;">"{top_job_meta["tagline"]}"</p>
-                <div style="background-color: #ECFDF5; border-radius: 12px; padding: 18px; text-align: left; margin-bottom: 18px; border: 1px solid #A7F3D0;">
-                    <p style="color: #065F46; line-height: 1.6; margin: 0; font-size: 0.95rem;">
-                        {top_job_meta["desc"]}
-                    </p>
-                </div>
-                <div style="text-align: center; margin-bottom: 8px;">
-                    {''.join([f'<span class="strength-tag">#{s}</span>' for s in top_job_meta["strengths"]])}
-                </div>
+            <div style="background-color: #ECFDF5; border-radius: 12px; padding: 18px; text-align: left; margin-bottom: 18px; border: 1px solid #A7F3D0;">
+                <p style="color: #065F46; line-height: 1.6; margin: 0; font-size: 0.95rem;">
+                    {top_job_meta["desc"]}
+                </p>
             </div>
             """,
             unsafe_allow_html=True
         )
+        
+        st.markdown('<div style="text-align: center; margin-bottom: 8px;">' + ''.join([f'<span class="strength-tag">#{s}</span>' for s in top_job_meta["strengths"]]) + '</div>', unsafe_allow_html=True)
 
-        components.html(
-            """
-            <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-            <div style="text-align: center; margin-top: 10px;">
-                <button id="download-btn" style="background-color: #10B981; color: white; border: none; padding: 10px 18px; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 0.9rem; box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3);">
-                    📸 결과 카드 이미지 저장하기
-                </button>
-            </div>
-            <script>
-            document.getElementById('download-btn').addEventListener('click', function() {
-                const target = window.parent.document.getElementById('capture-area');
-                if (target) {
-                    html2canvas(target, { scale: 2 }).then(canvas => {
-                        const link = document.createElement('a');
-                        link.download = 'trade_mbti_result.png';
-                        link.href = canvas.toDataURL('image/png');
-                        link.click();
-                    });
-                }
-            });
-            </script>
-            """,
-            height=60
-        )
-
-    # [2] 4축 레이더 차트 (Matplotlib + st.pyplot)
+    # [2] 4축 성향 진단 지표 (Streamlit 100% 순수 내장 위젯으로 변경 - 오류 원천 차단)
     with st.container(border=True):
-        st.markdown('<h3 style="font-size: 1.15rem; font-weight: 700; margin-bottom: 4px; color: #064E3B;">🧭 나의 무역 MBTI 성향 다이어그램</h3>', unsafe_allow_html=True)
-        st.caption("각 축의 100%에 가까울수록 해당 지표의 행동 성향이 뚜렷함을 나타냅니다.")
+        st.markdown('<h3 style="font-size: 1.15rem; font-weight: 700; margin-bottom: 6px; color: #064E3B;">🧭 나의 무역 MBTI 성향 지표 (4축 분석)</h3>', unsafe_allow_html=True)
+        st.caption("각 축의 100%에 가까울수록 해당 행동 성향이 뚜렷함을 나타냅니다.")
 
-        # 레이더 차트 데이터 생성
-        labels = [
-            f'E (외향: {e_ratio}%)', 
-            f'S (감각: {s_ratio}%)', 
-            f'T (사고: {t_ratio}%)', 
-            f'J (판단: {j_ratio}%)'
-        ]
-        values = [e_ratio, s_ratio, t_ratio, j_ratio]
-        
-        # 각도 계산 (4각 다이어그램)
-        num_vars = len(labels)
-        angles = np.linspace(0, 2 * np.pi, num_vars, endpoint=False).tolist()
-        
-        # 폐곡선 처리
-        values += values[:1]
-        angles += angles[:1]
-        
-        fig, ax = plt.subplots(figsize=(4.5, 4.5), subplot_kw=dict(polar=True))
-        fig.patch.set_facecolor('#FFFFFF')
-        ax.set_facecolor('#FFFFFF')
-        
-        # 12시 방향을 시작점으로 회전
-        ax.set_theta_offset(np.pi / 2)
-        ax.set_theta_direction(-1)
-        
-        # 눈금 및 축 설정
-        ax.set_ylim(0, 100)
-        ax.set_yticks([25, 50, 75, 100])
-        ax.set_yticklabels(['25%', '50%', '75%', '100%'], color='#94A3B8', size=8)
-        ax.grid(color='#E2E8F0', linestyle='--', linewidth=0.8)
-        
-        # 각 축 라벨
-        ax.set_xticks(angles[:-1])
-        ax.set_xticklabels(labels, size=9.5, weight='bold', color='#065F46')
-        
-        # 다각형 및 영역 채우기
-        ax.plot(angles, values, color='#059669', linewidth=2.2, linestyle='solid')
-        ax.fill(angles, values, color='#10B981', alpha=0.3)
-        ax.scatter(angles[:-1], values[:-1], color='#047857', s=45, zorder=10)
-        
-        st.pyplot(fig)
-        plt.close(fig)
+        # 축 1 & 2
+        col_m1, col_m2 = st.columns(2)
+        with col_m1:
+            st.markdown(f"**E (외향: {e_ratio}%) ↔ I (내향: {100-e_ratio}%)**")
+            st.progress(e_ratio / 100)
+        with col_m2:
+            st.markdown(f"**S (감각: {s_ratio}%) ↔ N (직관: {100-s_ratio}%)**")
+            st.progress(s_ratio / 100)
+
+        st.write("")
+
+        # 축 3 & 4
+        col_m3, col_m4 = st.columns(2)
+        with col_m3:
+            st.markdown(f"**T (사고: {t_ratio}%) ↔ F (감정: {100-t_ratio}%)**")
+            st.progress(t_ratio / 100)
+        with col_m4:
+            st.markdown(f"**J (판단: {j_ratio}%) ↔ P (유연: {100-j_ratio}%)**")
+            st.progress(j_ratio / 100)
 
     # [3] 추천 직무 맞춤 채용공고 바로가기
     with st.container(border=True):
