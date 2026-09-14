@@ -6,10 +6,10 @@ import folium
 from streamlit_folium import st_folium
 from dotenv import load_dotenv
 
-# 1. 레이아웃
+# 1. 기본 레이아웃
 st.set_page_config(page_title="스마트 여행 올인원 허브", page_icon="🌿", layout="wide")
 
-# 2. .env 로드
+# 2. .env 로드 (로컬 환경 대응)
 current_file = Path(__file__).resolve()
 for p in [current_file.parent] + list(current_file.parents):
     env_target = p / ".env"
@@ -17,14 +17,17 @@ for p in [current_file.parent] + list(current_file.parents):
         load_dotenv(env_target, override=True)
         break
 
-# 3. 키 로드 (Secrets -> env)
+# 3. 키 추출 함수
 def find_key(key_name):
+    # Streamlit Cloud
     try:
         if key_name in st.secrets:
-            return str(st.secrets[key_name]).strip()
+            return str(st.secrets[key_name]).strip().strip('"').strip("'")
     except Exception:
         pass
-    return os.getenv(key_name, "").strip()
+    # Local .env
+    val = os.getenv(key_name, "")
+    return str(val).strip().strip('"').strip("'")
 
 KAKAO_KEY = find_key("KAKAO_API_KEY")
 WEATHER_KEY = find_key("OPENWEATHER_API_KEY")
@@ -86,13 +89,13 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 5. 장소 검색 함수 (에러 명시 + 분할 검색 백업)
+# 5. 장소 검색 함수 (카카오 API + 정밀 지오코딩 백업)
 def search_places(keyword, api_key):
     keyword = keyword.strip()
     if not keyword:
         return []
 
-    # 1순위: 카카오 로컬 키워드 검색
+    # 1. 카카오 키워드 검색
     if api_key:
         clean_key = api_key.replace("KakaoAK", "").strip()
         url = "https://dapi.kakao.com/v2/local/search/keyword.json"
@@ -103,36 +106,36 @@ def search_places(keyword, api_key):
                 docs = res.json().get("documents", [])
                 if docs:
                     return docs
-            else:
-                st.warning(f"카카오 API 응답 오류 [{res.status_code}]: REST API 키가 맞는지 확인해 주세요. ({res.text})")
-        except Exception as e:
-            st.warning(f"카카오 연결 오류: {e}")
+            elif res.status_code == 401:
+                st.error("🚨 카카오 API 인증 실패(401): 카카오 Developers의 'REST API 키'가 올바르게 입력되었는지 확인해 주세요.")
+        except Exception:
+            pass
 
-    # 2순위: 오픈 무료 검색 (단어 분할 다중 검색)
-    search_terms = [keyword]
+    # 2. 무료 오픈 지오코딩 백업 (단어 분할 포함)
+    queries_to_try = [keyword]
     tokens = keyword.split()
     if len(tokens) > 1:
-        search_terms.append(tokens[-1])  # 마지막 핵심 단어 (예: '두물머리')
-        search_terms.append(" ".join(tokens[:-1]))
+        queries_to_try.append(tokens[-1])  # '두물머리' 같은 마지막 핵심 단어
+        queries_to_try.append(" ".join(tokens[:-1]))
 
-    headers = {"User-Agent": "SmartTravelHubApp/3.0"}
-    for term in search_terms:
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+    for q in queries_to_try:
         try:
-            url = "https://nominatim.openstreetmap.org/search"
-            res = requests.get(url, params={"q": term, "format": "json", "limit": 7, "accept-language": "ko"}, headers=headers, timeout=4)
+            url = f"https://nominatim.openstreetmap.org/search?q={requests.utils.quote(q)}&format=json&limit=5&countrycodes=kr"
+            res = requests.get(url, headers=headers, timeout=4)
             if res.status_code == 200:
                 data = res.json()
                 if data:
                     fallback_docs = []
                     for item in data:
-                        display = item.get("display_name", "")
+                        name = item.get("display_name", "").split(",")[0]
                         fallback_docs.append({
-                            "place_name": display.split(",")[0],
-                            "address_name": display,
-                            "road_address_name": display,
-                            "category_name": "일반 > 명소",
-                            "x": item.get("lon"),
-                            "y": item.get("lat"),
+                            "place_name": name,
+                            "address_name": item.get("display_name", ""),
+                            "road_address_name": item.get("display_name", ""),
+                            "category_name": "일반 > 관광/명소",
+                            "x": str(item.get("lon")),
+                            "y": str(item.get("lat")),
                             "place_url": f"https://www.google.com/maps/search/?api=1&query={item.get('lat')},{item.get('lon')}"
                         })
                     return fallback_docs
@@ -160,7 +163,7 @@ def get_weather(lat, lon, api_key):
         except Exception:
             pass
 
-    # 백업: Open-Meteo
+    # Open-Meteo 백업
     try:
         url = "https://api.open-meteo.com/v1/forecast"
         res = requests.get(url, params={
@@ -209,7 +212,7 @@ def get_exchange_data(api_key):
         pass
     return {}
 
-# --- 레이아웃 ---
+# --- 레이아웃 화면 ---
 st.markdown("""
 <div class="hero-box">
     <h3 style="margin:0; color:#2F3E32; font-weight:800;">🌿 스마트 여행 올인원 허브</h3>
@@ -221,17 +224,21 @@ tab1, tab2, tab3 = st.tabs(["📍 여행지 지도 & 날씨", "💱 글로벌 �
 
 # [TAB 1: 지도 & 날씨]
 with tab1:
-    with st.form(key="search_form"):
-        col_input, col_btn = st.columns([5, 1])
-        with col_input:
-            query = st.text_input("목적지 검색", value="경기도 양평 두물머리", label_visibility="collapsed")
-        with col_btn:
-            search_clicked = st.form_submit_button("장소 검색 🔍", use_container_width=True)
+    # 폼(Form)을 없애고 직관적인 컬럼 입력으로 변경 (동기화 렉 해결)
+    col_input, col_btn = st.columns([5, 1])
+    with col_input:
+        query = st.text_input("목적지 검색", value="경기도 양평 두물머리", label_visibility="collapsed", key="search_query_input")
+    with col_btn:
+        search_clicked = st.button("장소 검색 🔍", use_container_width=True)
 
-    # 검색어 변경 또는 검색 버튼 클릭 시 실행
-    if "places_data" not in st.session_state or search_clicked or st.session_state.get("last_q") != query:
+    # 검색 실행 트리거
+    if "current_search" not in st.session_state:
+        st.session_state.current_search = query
         st.session_state.places_data = search_places(query, KAKAO_KEY)
-        st.session_state.last_q = query
+
+    if search_clicked or (query != st.session_state.current_search):
+        st.session_state.current_search = query
+        st.session_state.places_data = search_places(query, KAKAO_KEY)
 
     places = st.session_state.get("places_data", [])
 
@@ -239,10 +246,10 @@ with tab1:
         c_lat, c_lng = float(places[0]["y"]), float(places[0]["x"])
         zoom_level = 14
     else:
-        c_lat, c_lng = 37.5512, 126.9882
+        c_lat, c_lng = 37.5512, 126.9882  # 기본값
         zoom_level = 13
 
-    # 날씨 박스
+    # 실시간 날씨 위젯
     w = get_weather(c_lat, c_lng, WEATHER_KEY)
     if w:
         st.markdown(f"""
@@ -281,7 +288,7 @@ with tab1:
         if places:
             for idx, p in enumerate(places):
                 cat = p.get('category_name', '').split('>')[-1].strip() or "명소"
-                link_text = "카카오맵 보기 ↗" if "kakao" in p.get('place_url', '') else "상세 위치 보기 ↗"
+                link_text = "카카오맵 보기 ↗" if "kakao" in p.get('place_url', '') else "위치 확인 ↗"
                 st.markdown(f"""
                 <div class="spot-box">
                     <div style="display:flex; justify-content:space-between;">
@@ -293,12 +300,11 @@ with tab1:
                 </div>
                 """, unsafe_allow_html=True)
         else:
-            st.info("검색된 장소가 없습니다. 검색어를 조금 더 간단히 입력해 보세요.")
+            st.info("검색된 장소가 없습니다. 검색어를 입력하고 검색 버튼을 눌러주세요.")
 
-# [TAB 2: 글로벌 다중 환율 계산기]
+# [TAB 2: 환율 계산기]
 with tab2:
     rates = get_exchange_data(EXCHANGE_KEY)
-    
     if rates:
         usd_krw = rates.get("KRW", 1350.0) / rates.get("USD", 1.0)
         jpy_krw = (rates.get("KRW", 1350.0) / rates.get("JPY", 150.0)) * 100
@@ -319,10 +325,8 @@ with tab2:
         st.markdown("---")
         
         curr_options = ["KRW", "USD", "JPY", "EUR", "CNY", "VND", "THB", "TWD", "AUD", "GBP", "SGD", "CAD", "CHF"]
-        
         st.markdown("**🧮 양방향 통화 맞춤 계산기**")
         c1, c2, c3 = st.columns([2, 2, 3])
-        
         with c1:
             from_curr = st.selectbox("보내는 통화 (From)", curr_options, index=1)
         with c2:
