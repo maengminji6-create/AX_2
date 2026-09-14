@@ -6,10 +6,10 @@ import folium
 from streamlit_folium import st_folium
 from dotenv import load_dotenv
 
-# 1. 기본 레이아웃
+# 1. 기본 레이아웃 설정
 st.set_page_config(page_title="스마트 여행 허브", page_icon="🌿", layout="wide")
 
-# 2. 로컬 .env 탐색
+# 2. 로컬 .env 파일 자동 탐색 및 로드
 current_file = Path(__file__).resolve()
 for p in [current_file.parent] + list(current_file.parents):
     env_target = p / ".env"
@@ -17,21 +17,21 @@ for p in [current_file.parent] + list(current_file.parents):
         load_dotenv(env_target, override=True)
         break
 
-# 3. 키 추출 함수 (Secrets -> env -> 빈값)
+# 3. API 키 추출 함수 (Streamlit Secrets 및 .env 호환)
 def find_key(key_name):
-    # Streamlit Cloud 환경
     try:
         if key_name in st.secrets:
             return str(st.secrets[key_name]).strip()
     except Exception:
         pass
-    # 로컬 .env 환경
     return os.getenv(key_name, "").strip()
 
+# 지정된 3개 API 환경 변수
 KAKAO_KEY = find_key("KAKAO_API_KEY")
 WEATHER_KEY = find_key("OPENWEATHER_API_KEY")
+EXCHANGE_KEY = find_key("EXCHANGE_RATE_API_KEY")
 
-# 4. 부드러운 UI 스타일
+# 4. 부드러운 UI 스타일 (크림 & 세이지 그린)
 st.markdown("""
 <style>
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
@@ -80,9 +80,9 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 5. 장소 검색 함수 (카카오 API 우선 -> 키 없거나 실패 시 OSM 오픈 API 자동 백업)
+# 5. 장소 검색 (카카오 REST API 우선 -> 미발급 시 OSM 자동 대체)
 def search_places(keyword, api_key):
-    # 1순위: 카카오 로컬 API 시도
+    # 1순위: 카카오 로컬 키워드 검색
     if api_key:
         url = "https://dapi.kakao.com/v2/local/search/keyword.json"
         headers = {"Authorization": f"KakaoAK {api_key}"}
@@ -95,10 +95,10 @@ def search_places(keyword, api_key):
         except Exception:
             pass
 
-    # 2순위: 오픈 무료 검색 (Nominatim - 키 필요 없음)
+    # 2순위: 오픈 무료 지오코딩 백업
     try:
         url = "https://nominatim.openstreetmap.org/search"
-        headers = {"User-Agent": "TravelHubApp/1.0"}
+        headers = {"User-Agent": "SmartTravelHub/1.0"}
         res = requests.get(url, params={"q": keyword, "format": "json", "limit": 5}, headers=headers, timeout=5)
         if res.status_code == 200:
             data = res.json()
@@ -119,7 +119,7 @@ def search_places(keyword, api_key):
 
     return []
 
-# 6. 오픈웨더 날씨 조회
+# 6. 오픈웨더 날씨 조회 (OPENWEATHER_API_KEY 사용)
 @st.cache_data(ttl=1800)
 def get_weather(lat, lon, api_key):
     if not api_key:
@@ -133,9 +133,20 @@ def get_weather(lat, lon, api_key):
         pass
     return None
 
-# 7. 환율 조회
+# 7. 환율 조회 (EXCHANGE_RATE_API_KEY 사용 -> 미발급 시 오픈 백업 사용)
 @st.cache_data(ttl=3600)
-def get_exchange():
+def get_exchange(api_key):
+    # 1순위: ExchangeRate-API 전용 엔드포인트
+    if api_key:
+        try:
+            url = f"https://v6.exchangerate-api.com/v6/{api_key}/latest/USD"
+            res = requests.get(url, timeout=5)
+            if res.status_code == 200:
+                return res.json().get("conversion_rates", {})
+        except Exception:
+            pass
+
+    # 2순위: 무료 오픈 환율 엔드포인트 백업
     try:
         res = requests.get("https://open.er-api.com/v6/latest/USD", timeout=5)
         if res.status_code == 200:
@@ -144,7 +155,7 @@ def get_exchange():
         pass
     return {}
 
-# --- 화면 출력부 ---
+# --- 레이아웃 화면 구성 ---
 st.markdown("""
 <div class="hero-box">
     <h3 style="margin:0; color:#2F3E32; font-weight:800;">🌿 스마트 여행 올인원 허브</h3>
@@ -163,22 +174,20 @@ with tab1:
         with col_btn:
             search_clicked = st.form_submit_button("장소 검색 🔍", use_container_width=True)
 
-    # 검색 실행 및 세션 저장
     if "places_data" not in st.session_state or search_clicked or st.session_state.get("last_q") != query:
         st.session_state.places_data = search_places(query, KAKAO_KEY)
         st.session_state.last_q = query
 
     places = st.session_state.get("places_data", [])
 
-    # 좌표 추출
     if places:
         c_lat, c_lng = float(places[0]["y"]), float(places[0]["x"])
         zoom_level = 14
     else:
-        c_lat, c_lng = 37.5512, 126.9882  # 기본값
+        c_lat, c_lng = 37.5512, 126.9882
         zoom_level = 13
 
-    # 날씨 박스
+    # 날씨 데이터 바인딩
     w_info = get_weather(c_lat, c_lng, WEATHER_KEY)
     if w_info:
         temp = w_info["main"]["temp"]
@@ -196,11 +205,12 @@ with tab1:
             <div style="font-size:24px; font-weight:800; color:#446849;">{temp}°C</div>
         </div>
         """, unsafe_allow_html=True)
+    elif not WEATHER_KEY:
+        st.caption("ℹ️ 날씨 정보를 보려면 OPENWEATHER_API_KEY를 설정해 주세요.")
 
     map_col, list_col = st.columns([6.5, 3.5])
     
     with map_col:
-        # 지도 생성
         m = folium.Map(location=[c_lat, c_lng], zoom_start=zoom_level, tiles="OpenStreetMap")
         
         if places:
@@ -217,7 +227,6 @@ with tab1:
         else:
             folium.Marker([c_lat, c_lng], tooltip="선택 위치", icon=folium.Icon(color="red")).add_to(m)
             
-        # key에 좌표를 바인딩하여 목적지 검색 시 지도 화면이 즉시 전환되도록 설정
         st_folium(m, width="100%", height=520, returned_objects=[], key=f"map_{c_lat}_{c_lng}")
 
     with list_col:
@@ -241,7 +250,7 @@ with tab1:
 
 # [TAB 2: 환율]
 with tab2:
-    rates = get_exchange()
+    rates = get_exchange(EXCHANGE_KEY)
     if rates:
         krw_rate = rates.get("KRW", 1350.0)
         curr_list = ["USD", "JPY", "EUR", "CNY", "VND", "THB", "TWD", "AUD"]
@@ -259,6 +268,8 @@ with tab2:
             <span style="font-size:26px; font-weight:800; color:#325838;">{calc_krw:,.0f} KRW (원)</span>
         </div>
         """, unsafe_allow_html=True)
+    else:
+        st.warning("환율 데이터를 불러오는 중입니다.")
 
 # [TAB 3: 사이트 모음]
 with tab3:
