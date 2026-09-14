@@ -13,7 +13,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# 2. 로컬 .env 탐색 및 로드 (로컬 실행 시 지원)
+# 2. 로컬 실행 대비 .env 파일 로드 (상위 폴더 전수 조사)
 current_file_path = Path(__file__).resolve()
 for parent in [current_file_path.parent] + list(current_file_path.parents):
     candidate = parent / ".env"
@@ -21,15 +21,28 @@ for parent in [current_file_path.parent] + list(current_file_path.parents):
         load_dotenv(dotenv_path=candidate, override=True)
         break
 
-# 3. 로컬 .env와 Streamlit Cloud Secrets 완벽 호환 함수
+# 3. [핵심] Streamlit Secrets + OS 환경 변수 + .env 통합 탐색 함수
 def get_secret(key_name):
-    # 1순위: Streamlit Cloud Secrets
-    if hasattr(st, "secrets") and key_name in st.secrets:
-        return st.secrets[key_name]
-    # 2순위: 환경변수 (.env)
-    return os.getenv(key_name, "")
+    # 1) Streamlit Cloud st.secrets 직접 조회 (대소문자 무관 탐색)
+    try:
+        if hasattr(st, "secrets"):
+            if key_name in st.secrets:
+                return str(st.secrets[key_name]).strip()
+            # 소문자로 저장된 경우 대비
+            if key_name.lower() in st.secrets:
+                return str(st.secrets[key_name.lower()]).strip()
+    except Exception:
+        pass
 
-KAKAO_KEY = get_secret("KAKAO_API_KEY") or get_secret("KAKAO_MAP_API_KEY")
+    # 2) OS 환경 변수 및 .env 조회
+    val = os.getenv(key_name) or os.getenv(key_name.lower())
+    if val:
+        return str(val).strip()
+
+    return ""
+
+# 변수명 KAKAO_API_KEY 명시적 추출
+KAKAO_KEY = get_secret("KAKAO_API_KEY")
 WEATHER_KEY = get_secret("OPENWEATHER_API_KEY")
 EXCHANGE_KEY = get_secret("EXCHANGE_RATE_API_KEY")
 
@@ -141,7 +154,6 @@ custom_ui_css = """
         margin-bottom: 12px;
     }
 
-    /* 버튼 스타일 */
     .stButton>button {
         background: linear-gradient(135deg, #608A64 0%, #46674A 100%) !important;
         color: #FFFFFF !important;
@@ -153,9 +165,18 @@ custom_ui_css = """
 """
 st.markdown(custom_ui_css, unsafe_allow_html=True)
 
-# 5. API 함수군 (에러 및 디버깅 메시지 강화)
+# 5. 만약 키가 아직 서버 Secrets에 안 들어간 경우를 위한 사이드바 비상 입력기
+if not KAKAO_KEY:
+    with st.sidebar:
+        st.warning("🔑 KAKAO_API_KEY 미감지")
+        manual_key = st.text_input("카카오 REST API 키 직접 입력 (테스트용)", type="password")
+        if manual_key:
+            KAKAO_KEY = manual_key.strip()
+            st.success("임시 키가 적용되었습니다!")
+
+# 6. API 함수군
 def search_kakao_places(keyword, api_key):
-    if not api_key:
+    if not api_key or not keyword:
         return []
     url = "https://dapi.kakao.com/v2/local/search/keyword.json"
     headers = {"Authorization": f"KakaoAK {api_key}"}
@@ -165,9 +186,11 @@ def search_kakao_places(keyword, api_key):
         if res.status_code == 200:
             return res.json().get("documents", [])
         elif res.status_code == 401:
-            st.warning("⚠️ 카카오 API 인증 실패: REST API 키가 올바른지 확인해 주세요.")
+            st.warning("⚠️ 카카오 인증 실패(401): `KAKAO_API_KEY`가 REST API 키인지 확인해 주세요.")
+        else:
+            st.warning(f"⚠️ 요청 응답 코드: {res.status_code}")
     except Exception as e:
-        st.error(f"통신 에러: {e}")
+        st.error(f"장소 검색 통신 에러: {e}")
     return []
 
 @st.cache_data(ttl=1800)
@@ -192,7 +215,6 @@ def get_current_weather(lat, lon, api_key):
 
 @st.cache_data(ttl=3600)
 def get_exchange_rates(api_key, base_currency="USD"):
-    # 1. 전달받은 개인 키로 v6 호출 시도
     if api_key:
         try:
             url = f"https://v6.exchangerate-api.com/v6/{api_key}/latest/{base_currency}"
@@ -203,7 +225,6 @@ def get_exchange_rates(api_key, base_currency="USD"):
                     return data.get("conversion_rates", {})
         except Exception:
             pass
-    # 2. 키 오류 또는 미입력 시 무료 오픈 엔드포인트 자동 폴백 (무조건 작동 보장)
     try:
         fallback_res = requests.get(f"https://open.er-api.com/v6/latest/{base_currency}", timeout=5)
         if fallback_res.status_code == 200:
@@ -212,7 +233,7 @@ def get_exchange_rates(api_key, base_currency="USD"):
         pass
     return {}
 
-# 6. 상단 헤더
+# 7. 상단 헤더
 st.markdown("""
 <div class="hero-banner">
     <div class="hero-title">🌿 스마트 여행 올인원 허브</div>
@@ -220,7 +241,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# 7. 상단 탭 구성
+# 8. 상단 탭 구성
 tab_map, tab_exchange, tab_links = st.tabs([
     "📍 여행지 지도 & 날씨", 
     "💱 실시간 환율 계산기", 
@@ -229,7 +250,6 @@ tab_map, tab_exchange, tab_links = st.tabs([
 
 # ----------------- TAB 1: 지도 & 날씨 -----------------
 with tab_map:
-    # 폼(form)으로 구성하여 엔터키나 버튼 누를 때 확실하게 검색 전송
     with st.form("search_form"):
         col_search, col_btn = st.columns([5, 1])
         with col_search:
@@ -242,25 +262,26 @@ with tab_map:
         with col_btn:
             submitted = st.form_submit_button("장소 검색 🔍", use_container_width=True)
 
-    # 초기 로드 시 또는 검색 제출 시 카카오 호출
+    # 검색 실행 조건
     if "places" not in st.session_state or submitted:
-        if not KAKAO_KEY:
-            st.error("🚨 카카오 API 키가 설정되지 않았습니다! Streamlit Cloud의 [Settings -> Secrets]에 KAKAO_API_KEY를 추가해 주세요.")
-        st.session_state.places = search_kakao_places(search_query, KAKAO_KEY)
+        if KAKAO_KEY:
+            st.session_state.places = search_kakao_places(search_query, KAKAO_KEY)
+        else:
+            st.session_state.places = []
+            st.info("💡 카카오 키가 감지되지 않았습니다. Streamlit Cloud의 Secrets에 등록하거나 사이드바에 키를 입력하면 바로 연동됩니다.")
 
     places = st.session_state.get("places", [])
 
-    # 좌표 결정
+    # 좌표 세팅 (기본: 서울 N서울타워)
     if places:
         center_lat = float(places[0]["y"])
         center_lng = float(places[0]["x"])
         zoom = 15
     else:
-        # 검색 실패 또는 초기 좌표 (서울 N서울타워 기본값)
         center_lat, center_lng = 37.5512, 126.9882
         zoom = 14
 
-    # 날씨 위젯
+    # 날씨 위젯 표시
     weather_data = get_current_weather(center_lat, center_lng, WEATHER_KEY)
     if weather_data:
         w_main = weather_data["main"]
@@ -292,11 +313,10 @@ with tab_map:
         </div>
         """, unsafe_allow_html=True)
 
-    # 2열 분할 레이아웃: 지도 + 장소 목록
+    # 2열 분할: 지도 + 장소 목록
     map_col, list_col = st.columns([6.5, 3.5])
 
     with map_col:
-        # ⭐️ 중요: 깨지던 CartoDB 대신 키가 필요 없는 표준 OpenStreetMap 적용
         m = folium.Map(location=[center_lat, center_lng], zoom_start=zoom, tiles="OpenStreetMap")
 
         if places:
@@ -324,15 +344,13 @@ with tab_map:
                     icon=folium.Icon(color="red" if idx == 0 else "green", icon="star" if idx == 0 else "info-sign")
                 ).add_to(m)
         else:
-            # 검색 결과가 아직 없을 때 기본 마커
             folium.Marker(
                 location=[center_lat, center_lng],
-                popup="기본 위치: 서울 N서울타워",
+                popup="위치: 서울 N서울타워",
                 tooltip="서울 N서울타워",
                 icon=folium.Icon(color="red", icon="info-sign")
             ).add_to(m)
 
-        # 지도 출력
         st_folium(m, width="100%", height=530, returned_objects=[])
 
     with list_col:
@@ -355,7 +373,7 @@ with tab_map:
                 </div>
                 """, unsafe_allow_html=True)
         else:
-            st.info("검색 결과가 없습니다. 상단 검색창에 '서울 남산타워' 등 원하는 장소를 입력해 보세요.")
+            st.info("검색창에 원하는 장소를 입력하고 검색 버튼을 눌러주세요.")
 
 # ----------------- TAB 2: 실시간 환율 계산기 -----------------
 with tab_exchange:
