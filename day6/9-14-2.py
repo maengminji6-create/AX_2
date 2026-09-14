@@ -9,29 +9,27 @@ from dotenv import load_dotenv
 # 1. 기본 레이아웃
 st.set_page_config(page_title="스마트 여행 허브", page_icon="🌿", layout="wide")
 
-# 2. 로컬 .env 탐색 (내 컴퓨터 실행 대비)
+# 2. 로컬 .env 탐색
 current_file = Path(__file__).resolve()
 for p in [current_file.parent] + list(current_file.parents):
     if (p / ".env").exists():
         load_dotenv(p / ".env", override=True)
         break
 
-# 3. [초간단 키 추출] 어디서든 무조건 키를 가져오는 로직
+# 3. 키 추출 함수
 def find_key(key_name):
-    # Streamlit Cloud 배포 환경
     try:
         if key_name in st.secrets:
             return str(st.secrets[key_name]).strip()
     except Exception:
         pass
-    # 내 컴퓨터 .env 환경
     return os.getenv(key_name, "").strip()
 
 KAKAO_KEY = find_key("KAKAO_API_KEY")
 WEATHER_KEY = find_key("OPENWEATHER_API_KEY")
 EXCHANGE_KEY = find_key("EXCHANGE_RATE_API_KEY")
 
-# 4. 깔끔하고 부드러운 UI 스타일 (크림 & 세이지 그린)
+# 4. 스타일
 st.markdown("""
 <style>
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
@@ -80,9 +78,10 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 5. 카카오 장소 검색
+# 5. 카카오 장소 검색 (에러 노출 강화)
 def search_kakao(keyword, api_key):
     if not api_key:
+        st.error("⚠️ KAKAO_API_KEY가 설정되어 있지 않습니다.")
         return []
     url = "https://dapi.kakao.com/v2/local/search/keyword.json"
     headers = {"Authorization": f"KakaoAK {api_key}"}
@@ -90,8 +89,10 @@ def search_kakao(keyword, api_key):
         res = requests.get(url, headers=headers, params={"query": keyword, "size": 7}, timeout=5)
         if res.status_code == 200:
             return res.json().get("documents", [])
-    except Exception:
-        pass
+        else:
+            st.warning(f"카카오 API 응답 오류 [{res.status_code}]: {res.text}")
+    except Exception as e:
+        st.error(f"통신 에러 발생: {e}")
     return []
 
 # 6. 오픈웨더 날씨 조회
@@ -108,7 +109,7 @@ def get_weather(lat, lon, api_key):
         pass
     return None
 
-# 7. 환율 조회 (키 없어도 무조건 작동하는 무료 오픈 API 내장)
+# 7. 환율 조회
 @st.cache_data(ttl=3600)
 def get_exchange():
     try:
@@ -131,28 +132,28 @@ tab1, tab2, tab3 = st.tabs(["📍 여행지 지도 & 날씨", "💱 실시간 �
 
 # [TAB 1: 지도 & 날씨]
 with tab1:
-    col_input, col_btn = st.columns([5, 1])
-    with col_input:
-        query = st.text_input("목적지 검색", value="서울 남산타워", label_visibility="collapsed")
-    with col_btn:
-        search_clicked = st.button("장소 검색 🔍", use_container_width=True)
+    with st.form(key="search_form"):
+        col_input, col_btn = st.columns([5, 1])
+        with col_input:
+            query = st.text_input("목적지 검색", value="경기도 양평 두물머리", label_visibility="collapsed")
+        with col_btn:
+            search_clicked = st.form_submit_button("장소 검색 🔍", use_container_width=True)
 
-    # 검색 실행
+    # 최초 실행 시 기본 검색 또는 변경/버튼 클릭 시 검색 실행
     if "places_data" not in st.session_state or search_clicked or st.session_state.get("last_q") != query:
         st.session_state.places_data = search_kakao(query, KAKAO_KEY)
         st.session_state.last_q = query
 
-    places = st.session_state.places_data
+    places = st.session_state.get("places_data", [])
 
-    # 지도 중심 좌표 설정 (검색 결과 첫번째 또는 남산타워 기본값)
     if places:
         c_lat, c_lng = float(places[0]["y"]), float(places[0]["x"])
         zoom_level = 15
     else:
-        c_lat, c_lng = 37.5512, 126.9882  # 남산타워 좌표
+        c_lat, c_lng = 37.5512, 126.9882  # 기본값: 남산타워
         zoom_level = 14
 
-    # 날씨 표시
+    # 날씨 정보
     w_info = get_weather(c_lat, c_lng, WEATHER_KEY)
     if w_info:
         temp = w_info["main"]["temp"]
@@ -171,11 +172,9 @@ with tab1:
         </div>
         """, unsafe_allow_html=True)
 
-    # 지도 + 목록 2열 배치
     map_col, list_col = st.columns([6.5, 3.5])
     
     with map_col:
-        # 키 요구 없는 안전한 표준 OpenStreetMap 타일
         m = folium.Map(location=[c_lat, c_lng], zoom_start=zoom_level, tiles="OpenStreetMap")
         
         if places:
@@ -190,9 +189,10 @@ with tab1:
                     icon=folium.Icon(color="red" if idx == 0 else "green", icon="star" if idx == 0 else "info-sign")
                 ).add_to(m)
         else:
-            folium.Marker([c_lat, c_lng], tooltip="서울 N서울타워", icon=folium.Icon(color="red")).add_to(m)
+            folium.Marker([c_lat, c_lng], tooltip="기본 위치 (남산타워)", icon=folium.Icon(color="red")).add_to(m)
             
-        st_folium(m, width="100%", height=520, returned_objects=[])
+        # key 파라미터에 현재 좌표를 넘겨 검색 시 무조건 다시 렌더링되도록 처리
+        st_folium(m, width="100%", height=520, returned_objects=[], key=f"map_{c_lat}_{c_lng}")
 
     with list_col:
         st.markdown("<h4 style='margin:0 0 10px 0; color:#344837; font-size:15px;'>📍 검색된 장소</h4>", unsafe_allow_html=True)
@@ -210,7 +210,7 @@ with tab1:
                 </div>
                 """, unsafe_allow_html=True)
         else:
-            st.info("검색어를 입력하고 검색 버튼을 눌러주세요.")
+            st.info("검색 결과가 없습니다. API 키 설정 상태나 검색어를 확인해 주세요.")
 
 # [TAB 2: 환율]
 with tab2:
