@@ -6,10 +6,10 @@ import folium
 from streamlit_folium import st_folium
 from dotenv import load_dotenv
 
-# 1. 기본 레이아웃 설정
-st.set_page_config(page_title="스마트 여행 허브", page_icon="🌿", layout="wide")
+# 1. 기본 레이아웃
+st.set_page_config(page_title="스마트 여행 올인원 허브", page_icon="🌿", layout="wide")
 
-# 2. 로컬 .env 파일 자동 탐색 및 로드
+# 2. .env 로드
 current_file = Path(__file__).resolve()
 for p in [current_file.parent] + list(current_file.parents):
     env_target = p / ".env"
@@ -17,7 +17,7 @@ for p in [current_file.parent] + list(current_file.parents):
         load_dotenv(env_target, override=True)
         break
 
-# 3. API 키 추출 함수 (Streamlit Secrets 및 .env 호환)
+# 3. 키 로드
 def find_key(key_name):
     try:
         if key_name in st.secrets:
@@ -26,12 +26,11 @@ def find_key(key_name):
         pass
     return os.getenv(key_name, "").strip()
 
-# 지정된 3개 API 환경 변수
 KAKAO_KEY = find_key("KAKAO_API_KEY")
 WEATHER_KEY = find_key("OPENWEATHER_API_KEY")
 EXCHANGE_KEY = find_key("EXCHANGE_RATE_API_KEY")
 
-# 4. 부드러운 UI 스타일 (크림 & 세이지 그린)
+# 4. 부드러운 감성 스타일
 st.markdown("""
 <style>
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
@@ -49,7 +48,7 @@ st.markdown("""
         border: 1px solid #EAE3D5;
         border-left: 5px solid #608A64;
         border-radius: 12px;
-        padding: 12px 20px;
+        padding: 14px 20px;
         margin-bottom: 16px;
         display: flex;
         align-items: center;
@@ -62,11 +61,18 @@ st.markdown("""
         padding: 12px 14px;
         margin-bottom: 8px;
     }
-    .exchange-box {
+    .rate-card {
+        background: #FFFFFF;
+        border: 1px solid #EAE5D9;
+        border-radius: 12px;
+        padding: 14px;
+        text-align: center;
+    }
+    .calc-box {
         background: linear-gradient(135deg, #FFFDF2 0%, #F2F8F2 100%);
         border: 1px solid #DFE7DC;
         border-radius: 14px;
-        padding: 22px;
+        padding: 24px;
         text-align: center;
         margin: 16px 0;
     }
@@ -80,9 +86,8 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 5. 장소 검색 (카카오 REST API 우선 -> 미발급 시 OSM 자동 대체)
+# 5. 장소 검색 (카카오 우선 -> 오픈 지오코더 백업)
 def search_places(keyword, api_key):
-    # 1순위: 카카오 로컬 키워드 검색
     if api_key:
         url = "https://dapi.kakao.com/v2/local/search/keyword.json"
         headers = {"Authorization": f"KakaoAK {api_key}"}
@@ -95,16 +100,15 @@ def search_places(keyword, api_key):
         except Exception:
             pass
 
-    # 2순위: 오픈 무료 지오코딩 백업
     try:
         url = "https://nominatim.openstreetmap.org/search"
-        headers = {"User-Agent": "SmartTravelHub/1.0"}
+        headers = {"User-Agent": "SmartTravelHub/2.0"}
         res = requests.get(url, params={"q": keyword, "format": "json", "limit": 5}, headers=headers, timeout=5)
         if res.status_code == 200:
             data = res.json()
-            fallback_docs = []
+            fallback = []
             for item in data:
-                fallback_docs.append({
+                fallback.append({
                     "place_name": item.get("display_name", "").split(",")[0],
                     "address_name": item.get("display_name", ""),
                     "road_address_name": item.get("display_name", ""),
@@ -113,57 +117,94 @@ def search_places(keyword, api_key):
                     "y": item.get("lat"),
                     "place_url": f"https://www.google.com/maps/search/?api=1&query={item.get('lat')},{item.get('lon')}"
                 })
-            return fallback_docs
+            return fallback
     except Exception:
         pass
-
     return []
 
-# 6. 오픈웨더 날씨 조회 (OPENWEATHER_API_KEY 사용)
-@st.cache_data(ttl=1800)
+# 6. 날씨 조회 (OpenWeather 우선 -> 키 만료/부재 시 오픈메테오 무조건 연결)
+@st.cache_data(ttl=1200)
 def get_weather(lat, lon, api_key):
-    if not api_key:
-        return None
-    url = "https://api.openweathermap.org/data/2.5/weather"
+    # 1순위: OpenWeather
+    if api_key:
+        try:
+            url = "https://api.openweathermap.org/data/2.5/weather"
+            res = requests.get(url, params={"lat": lat, "lon": lon, "appid": api_key, "units": "metric", "lang": "kr"}, timeout=4)
+            if res.status_code == 200:
+                data = res.json()
+                return {
+                    "temp": round(data["main"]["temp"], 1),
+                    "feels_like": round(data["main"]["feels_like"], 1),
+                    "humidity": data["main"]["humidity"],
+                    "desc": data["weather"][0]["description"],
+                    "icon_url": f"https://openweathermap.org/img/wn/{data['weather'][0]['icon']}@2x.png"
+                }
+        except Exception:
+            pass
+
+    # 2순위 백업: Open-Meteo (전세계 무료 공공 API, API 키 불필요)
     try:
-        res = requests.get(url, params={"lat": lat, "lon": lon, "appid": api_key, "units": "metric", "lang": "kr"}, timeout=5)
+        url = "https://api.open-meteo.com/v1/forecast"
+        res = requests.get(url, params={
+            "latitude": lat,
+            "longitude": lon,
+            "current": "temperature_2m,relative_humidity_2m,apparent_temperature,weather_code"
+        }, timeout=4)
         if res.status_code == 200:
-            return res.json()
+            c = res.json().get("current", {})
+            code = c.get("weather_code", 0)
+            
+            # WMO 기상 코드 한글 매핑
+            weather_map = {
+                0: "맑음 ☀️", 1: "대체로 맑음 🌤️", 2: "구름 조금 ⛅", 3: "흐림 ☁️",
+                45: "안개 🌫️", 48: "안개 🌫️", 51: "이슬비 🌦️", 61: "비 🌧️",
+                71: "눈 ❄️", 95: "뇌우 ⛈️"
+            }
+            desc = weather_map.get(code, "온화함 🌤️")
+            return {
+                "temp": round(c.get("temperature_2m", 20.0), 1),
+                "feels_like": round(c.get("apparent_temperature", 20.0), 1),
+                "humidity": c.get("relative_humidity_2m", 50),
+                "desc": desc,
+                "icon_url": "https://openweathermap.org/img/wn/02d@2x.png"
+            }
     except Exception:
         pass
     return None
 
-# 7. 환율 조회 (EXCHANGE_RATE_API_KEY 사용 -> 미발급 시 오픈 백업 사용)
-@st.cache_data(ttl=3600)
-def get_exchange(api_key):
-    # 1순위: ExchangeRate-API 전용 엔드포인트
+# 7. 환율 조회 (EXCHANGE_RATE_API_KEY 우선 -> 공공 백업)
+@st.cache_data(ttl=1800)
+def get_exchange_data(api_key):
+    # 1순위: 지정 API 키
     if api_key:
         try:
             url = f"https://v6.exchangerate-api.com/v6/{api_key}/latest/USD"
-            res = requests.get(url, timeout=5)
+            res = requests.get(url, timeout=4)
             if res.status_code == 200:
-                return res.json().get("conversion_rates", {})
+                rates = res.json().get("conversion_rates", {})
+                if rates:
+                    return rates
         except Exception:
             pass
 
-    # 2순위: 무료 오픈 환율 엔드포인트 백업
+    # 2순위: 키 필요 없는 오픈 환율 백업
     try:
-        res = requests.get("https://open.er-api.com/v6/latest/USD", timeout=5)
+        res = requests.get("https://open.er-api.com/v6/latest/USD", timeout=4)
         if res.status_code == 200:
             return res.json().get("rates", {})
     except Exception:
         pass
     return {}
 
-# --- 레이아웃 화면 구성 ---
+# --- 헤더 ---
 st.markdown("""
 <div class="hero-box">
     <h3 style="margin:0; color:#2F3E32; font-weight:800;">🌿 스마트 여행 올인원 허브</h3>
-    <p style="margin:4px 0 0 0; color:#6C7A6F; font-size:14px;">카카오 & 오픈 지도 탐색, 실시간 날씨, 환율 계산기 및 여행 포털</p>
+    <p style="margin:4px 0 0 0; color:#6C7A6F; font-size:14px;">실시간 지도·날씨 연동 & 다중 글로벌 환율 계산기</p>
 </div>
 """, unsafe_allow_html=True)
 
-tab1, tab2, tab3 = st.tabs(["📍 여행지 지도 & 날씨", "💱 실시간 환율 계산기", "🌐 여행 플랫폼 모음"])
+tab1, tab2, tab3 = st.tabs(["📍 여행지 지도 & 날씨", "💱 글로벌 다중 환율 계산기", "🌐 여행 플랫폼 모음"])
 
 # [TAB 1: 지도 & 날씨]
 with tab1:
@@ -187,41 +228,33 @@ with tab1:
         c_lat, c_lng = 37.5512, 126.9882
         zoom_level = 13
 
-    # 날씨 데이터 바인딩
-    w_info = get_weather(c_lat, c_lng, WEATHER_KEY)
-    if w_info:
-        temp = w_info["main"]["temp"]
-        desc = w_info["weather"][0]["description"]
-        icon = w_info["weather"][0]["icon"]
+    # 날씨 무조건 렌더링
+    w = get_weather(c_lat, c_lng, WEATHER_KEY)
+    if w:
         st.markdown(f"""
         <div class="weather-box">
-            <div style="display:flex; align-items:center; gap:12px;">
-                <img src="https://openweathermap.org/img/wn/{icon}@2x.png" width="46"/>
+            <div style="display:flex; align-items:center; gap:14px;">
+                <img src="{w['icon_url']}" width="50" height="50" style="object-fit:contain;"/>
                 <div>
-                    <b>현지 기상: {desc}</b><br>
-                    <small style="color:#728074;">체감 {w_info['main']['feels_like']}°C · 습도 {w_info['main']['humidity']}%</small>
+                    <b style="font-size:16px; color:#2A3C2D;">현지 기상 상태: {w['desc']}</b><br>
+                    <small style="color:#6A776B;">체감온도 {w['feels_like']}°C · 상대습도 {w['humidity']}%</small>
                 </div>
             </div>
-            <div style="font-size:24px; font-weight:800; color:#446849;">{temp}°C</div>
+            <div style="font-size:28px; font-weight:800; color:#3F6644;">{w['temp']}°C</div>
         </div>
         """, unsafe_allow_html=True)
-    elif not WEATHER_KEY:
-        st.caption("ℹ️ 날씨 정보를 보려면 OPENWEATHER_API_KEY를 설정해 주세요.")
 
     map_col, list_col = st.columns([6.5, 3.5])
     
     with map_col:
         m = folium.Map(location=[c_lat, c_lng], zoom_start=zoom_level, tiles="OpenStreetMap")
-        
         if places:
             for idx, p in enumerate(places):
                 lat, lng = float(p["y"]), float(p["x"])
-                name = p["place_name"]
-                addr = p.get("road_address_name") or p.get("address_name")
                 folium.Marker(
                     location=[lat, lng],
-                    popup=f"<b>{name}</b><br>{addr}",
-                    tooltip=name,
+                    popup=f"<b>{p['place_name']}</b><br>{p.get('road_address_name') or p.get('address_name')}",
+                    tooltip=p['place_name'],
                     icon=folium.Icon(color="red" if idx == 0 else "green", icon="star" if idx == 0 else "info-sign")
                 ).add_to(m)
         else:
@@ -230,7 +263,7 @@ with tab1:
         st_folium(m, width="100%", height=520, returned_objects=[], key=f"map_{c_lat}_{c_lng}")
 
     with list_col:
-        st.markdown("<h4 style='margin:0 0 10px 0; color:#344837; font-size:15px;'>📍 검색된 장소</h4>", unsafe_allow_html=True)
+        st.markdown("<h4 style='margin:0 0 10px 0; color:#344837; font-size:15px;'>📍 검색된 장소 결과</h4>", unsafe_allow_html=True)
         if places:
             for idx, p in enumerate(places):
                 cat = p.get('category_name', '').split('>')[-1].strip() or "명소"
@@ -246,32 +279,62 @@ with tab1:
                 </div>
                 """, unsafe_allow_html=True)
         else:
-            st.info("검색 결과가 없습니다.")
+            st.info("검색된 장소가 없습니다.")
 
-# [TAB 2: 환율]
+# [TAB 2: 글로벌 다중 환율 계산기]
 with tab2:
-    rates = get_exchange(EXCHANGE_KEY)
+    rates = get_exchange_data(EXCHANGE_KEY)
+    
     if rates:
-        krw_rate = rates.get("KRW", 1350.0)
-        curr_list = ["USD", "JPY", "EUR", "CNY", "VND", "THB", "TWD", "AUD"]
-        c1, c2 = st.columns(2)
-        with c1:
-            base = st.selectbox("기준 통화", curr_list)
-        with c2:
-            amt = st.number_input(f"{base} 금액", min_value=0.0, value=100.0, step=10.0)
+        # 1. 상단 주요 통화 실시간 시세 카드 (원화 대비)
+        usd_krw = rates.get("KRW", 1350.0) / rates.get("USD", 1.0)
+        jpy_krw = (rates.get("KRW", 1350.0) / rates.get("JPY", 150.0)) * 100
+        eur_krw = rates.get("KRW", 1350.0) / rates.get("EUR", 0.92)
+        cny_krw = rates.get("KRW", 1350.0) / rates.get("CNY", 7.2)
         
-        calc_krw = (amt / rates.get(base, 1.0)) * krw_rate
+        st.markdown("**📊 주요 통화 실시간 환율 현황 (KRW 기준)**")
+        rc1, rc2, rc3, rc4 = st.columns(4)
+        with rc1:
+            st.markdown(f"""<div class="rate-card"><small style="color:#718073;">🇺🇸 미국 USD</small><div style="font-size:19px; font-weight:800; color:#2A3C2D; margin-top:4px;">{usd_krw:,.1f} 원</div></div>""", unsafe_allow_html=True)
+        with rc2:
+            st.markdown(f"""<div class="rate-card"><small style="color:#718073;">🇯🇵 일본 JPY (100엔)</small><div style="font-size:19px; font-weight:800; color:#2A3C2D; margin-top:4px;">{jpy_krw:,.1f} 원</div></div>""", unsafe_allow_html=True)
+        with rc3:
+            st.markdown(f"""<div class="rate-card"><small style="color:#718073;">🇪🇺 유럽 EUR</small><div style="font-size:19px; font-weight:800; color:#2A3C2D; margin-top:4px;">{eur_krw:,.1f} 원</div></div>""", unsafe_allow_html=True)
+        with rc4:
+            st.markdown(f"""<div class="rate-card"><small style="color:#718073;">🇨🇳 중국 CNY</small><div style="font-size:19px; font-weight:800; color:#2A3C2D; margin-top:4px;">{cny_krw:,.1f} 원</div></div>""", unsafe_allow_html=True)
+
+        st.markdown("---")
+        
+        # 2. 양방향 정밀 환율 계산기
+        curr_options = ["KRW", "USD", "JPY", "EUR", "CNY", "VND", "THB", "TWD", "AUD", "GBP", "SGD", "CAD", "CHF"]
+        
+        st.markdown("**🧮 양방향 통화 맞춤 계산기**")
+        c1, c2, c3 = st.columns([2, 2, 3])
+        
+        with c1:
+            from_curr = st.selectbox("보내는 통화 (From)", curr_options, index=1)
+        with c2:
+            to_curr = st.selectbox("받는 통화 (To)", curr_options, index=0)
+        with c3:
+            input_amt = st.number_input("환산할 금액", min_value=0.0, value=100.0, step=10.0)
+
+        # 교차 환율 계산
+        from_rate = rates.get(from_curr, 1.0)
+        to_rate = rates.get(to_curr, 1.0)
+        converted_result = (input_amt / from_rate) * to_rate
+
         st.markdown(f"""
-        <div class="exchange-box">
-            <span style="font-size:22px; font-weight:800; color:#2A3C2D;">{amt:,.2f} {base}</span>
-            <span style="font-size:18px; color:#9EB0A1; margin:0 10px;">≈</span>
-            <span style="font-size:26px; font-weight:800; color:#325838;">{calc_krw:,.0f} KRW (원)</span>
+        <div class="calc-box">
+            <span style="font-size:24px; font-weight:700; color:#3A4A3C;">{input_amt:,.2f} {from_curr}</span>
+            <span style="font-size:20px; color:#A4B4A6; margin:0 14px;">=</span>
+            <span style="font-size:30px; font-weight:800; color:#305A36;">{converted_result:,.2f} {to_curr}</span>
+            <div style="margin-top:8px; font-size:12px; color:#78887A;">(적용 기준 환율: 1 {from_curr} = {to_rate/from_rate:,.4f} {to_curr})</div>
         </div>
         """, unsafe_allow_html=True)
     else:
-        st.warning("환율 데이터를 불러오는 중입니다.")
+        st.warning("환율 데이터를 실시간으로 가져오는 중입니다. 잠시 후 새로고침해 주세요.")
 
-# [TAB 3: 사이트 모음]
+# [TAB 3: 여행 플랫폼]
 with tab3:
     c1, c2, c3 = st.columns(3)
     with c1:
@@ -285,7 +348,7 @@ with tab3:
         st.write("")
         st.link_button("에어비앤비", "https://www.airbnb.co.kr", use_container_width=True)
     with c3:
-        st.markdown("##### 🎟️ 액티비티")
+        st.markdown("##### 🎟️ 액티비티 & 투어")
         st.link_button("클룩", "https://www.klook.com/ko/", use_container_width=True)
         st.write("")
         st.link_button("마이리얼트립", "https://www.myrealtrip.com", use_container_width=True)
