@@ -12,24 +12,26 @@ st.set_page_config(page_title="스마트 여행 허브", page_icon="🌿", layou
 # 2. 로컬 .env 탐색
 current_file = Path(__file__).resolve()
 for p in [current_file.parent] + list(current_file.parents):
-    if (p / ".env").exists():
-        load_dotenv(p / ".env", override=True)
+    env_target = p / ".env"
+    if env_target.exists():
+        load_dotenv(env_target, override=True)
         break
 
-# 3. 키 추출 함수
+# 3. 키 추출 함수 (Secrets -> env -> 빈값)
 def find_key(key_name):
+    # Streamlit Cloud 환경
     try:
         if key_name in st.secrets:
             return str(st.secrets[key_name]).strip()
     except Exception:
         pass
+    # 로컬 .env 환경
     return os.getenv(key_name, "").strip()
 
 KAKAO_KEY = find_key("KAKAO_API_KEY")
 WEATHER_KEY = find_key("OPENWEATHER_API_KEY")
-EXCHANGE_KEY = find_key("EXCHANGE_RATE_API_KEY")
 
-# 4. 스타일
+# 4. 부드러운 UI 스타일
 st.markdown("""
 <style>
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
@@ -78,21 +80,43 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 5. 카카오 장소 검색 (에러 노출 강화)
-def search_kakao(keyword, api_key):
-    if not api_key:
-        st.error("⚠️ KAKAO_API_KEY가 설정되어 있지 않습니다.")
-        return []
-    url = "https://dapi.kakao.com/v2/local/search/keyword.json"
-    headers = {"Authorization": f"KakaoAK {api_key}"}
+# 5. 장소 검색 함수 (카카오 API 우선 -> 키 없거나 실패 시 OSM 오픈 API 자동 백업)
+def search_places(keyword, api_key):
+    # 1순위: 카카오 로컬 API 시도
+    if api_key:
+        url = "https://dapi.kakao.com/v2/local/search/keyword.json"
+        headers = {"Authorization": f"KakaoAK {api_key}"}
+        try:
+            res = requests.get(url, headers=headers, params={"query": keyword, "size": 7}, timeout=5)
+            if res.status_code == 200:
+                docs = res.json().get("documents", [])
+                if docs:
+                    return docs
+        except Exception:
+            pass
+
+    # 2순위: 오픈 무료 검색 (Nominatim - 키 필요 없음)
     try:
-        res = requests.get(url, headers=headers, params={"query": keyword, "size": 7}, timeout=5)
+        url = "https://nominatim.openstreetmap.org/search"
+        headers = {"User-Agent": "TravelHubApp/1.0"}
+        res = requests.get(url, params={"q": keyword, "format": "json", "limit": 5}, headers=headers, timeout=5)
         if res.status_code == 200:
-            return res.json().get("documents", [])
-        else:
-            st.warning(f"카카오 API 응답 오류 [{res.status_code}]: {res.text}")
-    except Exception as e:
-        st.error(f"통신 에러 발생: {e}")
+            data = res.json()
+            fallback_docs = []
+            for item in data:
+                fallback_docs.append({
+                    "place_name": item.get("display_name", "").split(",")[0],
+                    "address_name": item.get("display_name", ""),
+                    "road_address_name": item.get("display_name", ""),
+                    "category_name": "일반 > 명소",
+                    "x": item.get("lon"),
+                    "y": item.get("lat"),
+                    "place_url": f"https://www.google.com/maps/search/?api=1&query={item.get('lat')},{item.get('lon')}"
+                })
+            return fallback_docs
+    except Exception:
+        pass
+
     return []
 
 # 6. 오픈웨더 날씨 조회
@@ -124,7 +148,7 @@ def get_exchange():
 st.markdown("""
 <div class="hero-box">
     <h3 style="margin:0; color:#2F3E32; font-weight:800;">🌿 스마트 여행 올인원 허브</h3>
-    <p style="margin:4px 0 0 0; color:#6C7A6F; font-size:14px;">카카오 지도 탐색, 실시간 날씨, 환율 계산기 및 여행 사이트 포털</p>
+    <p style="margin:4px 0 0 0; color:#6C7A6F; font-size:14px;">카카오 & 오픈 지도 탐색, 실시간 날씨, 환율 계산기 및 여행 포털</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -139,21 +163,22 @@ with tab1:
         with col_btn:
             search_clicked = st.form_submit_button("장소 검색 🔍", use_container_width=True)
 
-    # 최초 실행 시 기본 검색 또는 변경/버튼 클릭 시 검색 실행
+    # 검색 실행 및 세션 저장
     if "places_data" not in st.session_state or search_clicked or st.session_state.get("last_q") != query:
-        st.session_state.places_data = search_kakao(query, KAKAO_KEY)
+        st.session_state.places_data = search_places(query, KAKAO_KEY)
         st.session_state.last_q = query
 
     places = st.session_state.get("places_data", [])
 
+    # 좌표 추출
     if places:
         c_lat, c_lng = float(places[0]["y"]), float(places[0]["x"])
-        zoom_level = 15
-    else:
-        c_lat, c_lng = 37.5512, 126.9882  # 기본값: 남산타워
         zoom_level = 14
+    else:
+        c_lat, c_lng = 37.5512, 126.9882  # 기본값
+        zoom_level = 13
 
-    # 날씨 정보
+    # 날씨 박스
     w_info = get_weather(c_lat, c_lng, WEATHER_KEY)
     if w_info:
         temp = w_info["main"]["temp"]
@@ -175,6 +200,7 @@ with tab1:
     map_col, list_col = st.columns([6.5, 3.5])
     
     with map_col:
+        # 지도 생성
         m = folium.Map(location=[c_lat, c_lng], zoom_start=zoom_level, tiles="OpenStreetMap")
         
         if places:
@@ -189,9 +215,9 @@ with tab1:
                     icon=folium.Icon(color="red" if idx == 0 else "green", icon="star" if idx == 0 else "info-sign")
                 ).add_to(m)
         else:
-            folium.Marker([c_lat, c_lng], tooltip="기본 위치 (남산타워)", icon=folium.Icon(color="red")).add_to(m)
+            folium.Marker([c_lat, c_lng], tooltip="선택 위치", icon=folium.Icon(color="red")).add_to(m)
             
-        # key 파라미터에 현재 좌표를 넘겨 검색 시 무조건 다시 렌더링되도록 처리
+        # key에 좌표를 바인딩하여 목적지 검색 시 지도 화면이 즉시 전환되도록 설정
         st_folium(m, width="100%", height=520, returned_objects=[], key=f"map_{c_lat}_{c_lng}")
 
     with list_col:
@@ -199,6 +225,7 @@ with tab1:
         if places:
             for idx, p in enumerate(places):
                 cat = p.get('category_name', '').split('>')[-1].strip() or "명소"
+                link_text = "카카오맵 보기 ↗" if "kakao" in p.get('place_url', '') else "상세 위치 보기 ↗"
                 st.markdown(f"""
                 <div class="spot-box">
                     <div style="display:flex; justify-content:space-between;">
@@ -206,11 +233,11 @@ with tab1:
                         <span style="font-size:10px; background:#FFF9E0; color:#7B6816; padding:2px 4px; border-radius:3px;">{cat}</span>
                     </div>
                     <div style="font-size:11px; color:#718073; margin:3px 0;">{p.get('road_address_name') or p.get('address_name')}</div>
-                    <a href="{p['place_url']}" target="_blank" style="font-size:11px; color:#4A734E; font-weight:600; text-decoration:none;">카카오맵 보기 ↗</a>
+                    <a href="{p['place_url']}" target="_blank" style="font-size:11px; color:#4A734E; font-weight:600; text-decoration:none;">{link_text}</a>
                 </div>
                 """, unsafe_allow_html=True)
         else:
-            st.info("검색 결과가 없습니다. API 키 설정 상태나 검색어를 확인해 주세요.")
+            st.info("검색 결과가 없습니다.")
 
 # [TAB 2: 환율]
 with tab2:
