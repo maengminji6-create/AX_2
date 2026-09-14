@@ -13,7 +13,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# 2. .env 파일 로드
+# 2. 로컬 .env 탐색 및 로드 (로컬 실행 시 지원)
 current_file_path = Path(__file__).resolve()
 for parent in [current_file_path.parent] + list(current_file_path.parents):
     candidate = parent / ".env"
@@ -21,11 +21,19 @@ for parent in [current_file_path.parent] + list(current_file_path.parents):
         load_dotenv(dotenv_path=candidate, override=True)
         break
 
-KAKAO_KEY = os.getenv("KAKAO_API_KEY") or os.getenv("KAKAO_MAP_API_KEY")
-WEATHER_KEY = os.getenv("OPENWEATHER_API_KEY")
-EXCHANGE_KEY = os.getenv("EXCHANGE_RATE_API_KEY")
+# 3. 로컬 .env와 Streamlit Cloud Secrets 완벽 호환 함수
+def get_secret(key_name):
+    # 1순위: Streamlit Cloud Secrets
+    if hasattr(st, "secrets") and key_name in st.secrets:
+        return st.secrets[key_name]
+    # 2순위: 환경변수 (.env)
+    return os.getenv(key_name, "")
 
-# 3. 크림 옐로우 & 소프트 세이지 그린 감성 CSS
+KAKAO_KEY = get_secret("KAKAO_API_KEY") or get_secret("KAKAO_MAP_API_KEY")
+WEATHER_KEY = get_secret("OPENWEATHER_API_KEY")
+EXCHANGE_KEY = get_secret("EXCHANGE_RATE_API_KEY")
+
+# 4. 세련된 크림 옐로우 & 소프트 세이지 그린 스타일링
 custom_ui_css = """
 <style>
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
@@ -34,36 +42,31 @@ custom_ui_css = """
         font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
     }
 
-    /* 전체 배경: 따뜻하고 부드러운 웜 뉴트럴 */
     .stApp {
         background-color: #FAF8F5 !important;
     }
 
-    /* 메인 히어로 배너 카드 */
+    /* 상단 배너 */
     .hero-banner {
         background: linear-gradient(135deg, #FFFDF0 0%, #F3F7F2 100%);
         border: 1px solid #ECE7DE;
         border-radius: 18px;
-        padding: 26px 30px;
-        margin-bottom: 22px;
+        padding: 24px 28px;
+        margin-bottom: 20px;
         box-shadow: 0 4px 16px rgba(160, 150, 130, 0.06);
     }
     .hero-title {
-        font-size: 24px;
+        font-size: 22px;
         font-weight: 800;
         color: #2F3E32;
         margin-bottom: 6px;
-        display: flex;
-        align-items: center;
-        gap: 10px;
     }
     .hero-desc {
-        font-size: 14px;
+        font-size: 13.5px;
         color: #6C7A6F;
-        line-height: 1.5;
     }
 
-    /* 탭 스타일: 소프트 그린 & 크림 톤 */
+    /* 탭 디자인 */
     .stTabs [data-baseweb="tab-list"] {
         gap: 8px;
         background-color: transparent;
@@ -74,11 +77,10 @@ custom_ui_css = """
         background-color: #FFFFFF;
         border: 1px solid #ECE5DA;
         border-radius: 10px 10px 0 0;
-        padding: 9px 18px;
+        padding: 8px 18px;
         font-size: 14px;
         font-weight: 600;
         color: #687569;
-        transition: all 0.2s ease;
     }
     .stTabs [aria-selected="true"] {
         background: #F4F8F3 !important;
@@ -87,96 +89,85 @@ custom_ui_css = """
         border-bottom: 2.5px solid #608A64 !important;
     }
 
-    /* 날씨 정보 위젯 카드 */
+    /* 날씨 위젯 */
     .weather-card {
         background: #FFFFFF;
         border: 1px solid #EAE3D5;
         border-left: 5px solid #608A64;
-        border-radius: 14px;
-        padding: 14px 22px;
-        margin-bottom: 18px;
+        border-radius: 12px;
+        padding: 12px 20px;
+        margin-bottom: 16px;
         display: flex;
         align-items: center;
         justify-content: space-between;
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
     }
 
-    /* 장소 상세 정보 카드 */
+    /* 장소 카드 */
     .spot-card {
         background: #FFFFFF;
         border: 1px solid #ECE7DE;
-        border-radius: 12px;
-        padding: 14px 16px;
+        border-radius: 10px;
+        padding: 12px 14px;
         margin-bottom: 10px;
-        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
         transition: all 0.2s ease;
     }
     .spot-card:hover {
         border-color: #8EAE92;
         transform: translateY(-2px);
-        box-shadow: 0 4px 14px rgba(96, 138, 100, 0.1);
+        box-shadow: 0 4px 12px rgba(96, 138, 100, 0.08);
     }
 
-    /* 환율 결과 하이라이트 카드 */
+    /* 환율 카드 */
     .exchange-card {
         background: linear-gradient(135deg, #FFFDF2 0%, #F2F8F2 100%);
         border: 1px solid #DFE7DC;
-        border-radius: 16px;
-        padding: 24px;
-        margin: 18px 0;
+        border-radius: 14px;
+        padding: 22px;
+        margin: 16px 0;
         text-align: center;
-        box-shadow: 0 4px 14px rgba(96, 138, 100, 0.06);
     }
 
-    /* 서비스 바로가기 링크 그룹 카드 */
     .service-card {
         background: #FFFFFF;
         border: 1px solid #ECE7DE;
-        border-radius: 14px;
-        padding: 20px;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+        border-radius: 12px;
+        padding: 18px;
     }
     .service-card-title {
         font-size: 15px;
         font-weight: 700;
         color: #344837;
-        margin-bottom: 14px;
-        display: flex;
-        align-items: center;
-        gap: 8px;
+        margin-bottom: 12px;
     }
 
-    /* 기본 버튼 디자인 */
+    /* 버튼 스타일 */
     .stButton>button {
         background: linear-gradient(135deg, #608A64 0%, #46674A 100%) !important;
         color: #FFFFFF !important;
         border: none !important;
         border-radius: 8px !important;
         font-weight: 600 !important;
-        padding: 7px 18px !important;
-        transition: all 0.2s ease !important;
-    }
-    .stButton>button:hover {
-        background: linear-gradient(135deg, #46674A 0%, #355038 100%) !important;
-        box-shadow: 0 3px 10px rgba(70, 103, 74, 0.2) !important;
     }
 </style>
 """
 st.markdown(custom_ui_css, unsafe_allow_html=True)
 
-# 4. API 연동 함수
+# 5. API 함수군 (에러 및 디버깅 메시지 강화)
 def search_kakao_places(keyword, api_key):
     if not api_key:
         return []
     url = "https://dapi.kakao.com/v2/local/search/keyword.json"
     headers = {"Authorization": f"KakaoAK {api_key}"}
-    params = {"query": keyword, "size": 6}
+    params = {"query": keyword, "size": 8}
     try:
-        res = requests.get(url, headers=headers, params=params, timeout=5)
+        res = requests.get(url, headers=headers, params=params, timeout=6)
         if res.status_code == 200:
             return res.json().get("documents", [])
-    except Exception:
-        pass
+        elif res.status_code == 401:
+            st.warning("⚠️ 카카오 API 인증 실패: REST API 키가 올바른지 확인해 주세요.")
+    except Exception as e:
+        st.error(f"통신 에러: {e}")
     return []
 
 @st.cache_data(ttl=1800)
@@ -201,9 +192,10 @@ def get_current_weather(lat, lon, api_key):
 
 @st.cache_data(ttl=3600)
 def get_exchange_rates(api_key, base_currency="USD"):
+    # 1. 전달받은 개인 키로 v6 호출 시도
     if api_key:
-        url = f"https://v6.exchangerate-api.com/v6/{api_key}/latest/{base_currency}"
         try:
+            url = f"https://v6.exchangerate-api.com/v6/{api_key}/latest/{base_currency}"
             res = requests.get(url, timeout=5)
             if res.status_code == 200:
                 data = res.json()
@@ -211,6 +203,7 @@ def get_exchange_rates(api_key, base_currency="USD"):
                     return data.get("conversion_rates", {})
         except Exception:
             pass
+    # 2. 키 오류 또는 미입력 시 무료 오픈 엔드포인트 자동 폴백 (무조건 작동 보장)
     try:
         fallback_res = requests.get(f"https://open.er-api.com/v6/latest/{base_currency}", timeout=5)
         if fallback_res.status_code == 200:
@@ -219,17 +212,15 @@ def get_exchange_rates(api_key, base_currency="USD"):
         pass
     return {}
 
-# 5. 헤더 배너
+# 6. 상단 헤더
 st.markdown("""
 <div class="hero-banner">
     <div class="hero-title">🌿 스마트 여행 올인원 허브</div>
-    <div class="hero-desc">
-        카카오 지도를 통한 목적지 탐색, 현지 실시간 날씨 확인, 환율 계산기 및 주요 예약 플랫폼을 한 화면에서 편리하게 이용하세요.
-    </div>
+    <div class="hero-desc">카카오 장소 검색, OpenWeather 현지 기상정보, 실시간 환율 계산기 및 여행 사이트 포털</div>
 </div>
 """, unsafe_allow_html=True)
 
-# 6. 상단 탭 메뉴
+# 7. 상단 탭 구성
 tab_map, tab_exchange, tab_links = st.tabs([
     "📍 여행지 지도 & 날씨", 
     "💱 실시간 환율 계산기", 
@@ -238,29 +229,36 @@ tab_map, tab_exchange, tab_links = st.tabs([
 
 # ----------------- TAB 1: 지도 & 날씨 -----------------
 with tab_map:
-    col_search, col_btn = st.columns([5, 1])
-    with col_search:
-        search_query = st.text_input(
-            "목적지 검색", 
-            value="제주 성산일출봉", 
-            placeholder="명소, 카페, 맛집, 주소를 검색해 보세요...",
-            label_visibility="collapsed"
-        )
-    with col_btn:
-        do_search = st.button("장소 검색 🔍", use_container_width=True)
+    # 폼(form)으로 구성하여 엔터키나 버튼 누를 때 확실하게 검색 전송
+    with st.form("search_form"):
+        col_search, col_btn = st.columns([5, 1])
+        with col_search:
+            search_query = st.text_input(
+                "목적지 검색", 
+                value="서울 남산타워", 
+                placeholder="명소, 카페, 맛집, 주소를 검색해 보세요...",
+                label_visibility="collapsed"
+            )
+        with col_btn:
+            submitted = st.form_submit_button("장소 검색 🔍", use_container_width=True)
 
-    if "places" not in st.session_state or do_search:
+    # 초기 로드 시 또는 검색 제출 시 카카오 호출
+    if "places" not in st.session_state or submitted:
+        if not KAKAO_KEY:
+            st.error("🚨 카카오 API 키가 설정되지 않았습니다! Streamlit Cloud의 [Settings -> Secrets]에 KAKAO_API_KEY를 추가해 주세요.")
         st.session_state.places = search_kakao_places(search_query, KAKAO_KEY)
 
     places = st.session_state.get("places", [])
 
+    # 좌표 결정
     if places:
         center_lat = float(places[0]["y"])
         center_lng = float(places[0]["x"])
-        zoom = 14
+        zoom = 15
     else:
-        center_lat, center_lng = 33.4586, 126.9423
-        zoom = 12
+        # 검색 실패 또는 초기 좌표 (서울 N서울타워 기본값)
+        center_lat, center_lng = 37.5512, 126.9882
+        zoom = 14
 
     # 날씨 위젯
     weather_data = get_current_weather(center_lat, center_lng, WEATHER_KEY)
@@ -268,23 +266,23 @@ with tab_map:
         w_main = weather_data["main"]
         w_weather = weather_data["weather"][0]
         icon_code = w_weather["icon"]
-        icon_url = f"http://openweathermap.org/img/wn/{icon_code}@2x.png"
+        icon_url = f"https://openweathermap.org/img/wn/{icon_code}@2x.png"
         
         st.markdown(f"""
         <div class="weather-card">
             <div style="display: flex; align-items: center; gap: 14px;">
-                <img src="{icon_url}" width="52" height="52" style="margin: -6px 0;"/>
+                <img src="{icon_url}" width="48" height="48" style="margin: -6px 0;"/>
                 <div>
                     <div style="font-size: 15px; font-weight: 700; color: #2C3E2D;">
                         현지 날씨: {w_weather['description']}
                     </div>
-                    <div style="font-size: 13px; color: #728074; margin-top: 2px;">
+                    <div style="font-size: 13px; color: #728074;">
                         체감 {w_main['feels_like']}°C · 습도 {w_main['humidity']}% · 풍속 {weather_data['wind']['speed']}m/s
                     </div>
                 </div>
             </div>
             <div style="text-align: right;">
-                <div style="font-size: 26px; font-weight: 800; color: #446849;">
+                <div style="font-size: 24px; font-weight: 800; color: #446849;">
                     {w_main['temp']}°C
                 </div>
                 <div style="font-size: 12px; color: #9AA79C;">
@@ -295,39 +293,50 @@ with tab_map:
         """, unsafe_allow_html=True)
 
     # 2열 분할 레이아웃: 지도 + 장소 목록
-    map_col, list_col = st.columns([6.8, 3.2])
+    map_col, list_col = st.columns([6.5, 3.5])
 
     with map_col:
-        m = folium.Map(location=[center_lat, center_lng], zoom_start=zoom, tiles="CartoDB positron")
+        # ⭐️ 중요: 깨지던 CartoDB 대신 키가 필요 없는 표준 OpenStreetMap 적용
+        m = folium.Map(location=[center_lat, center_lng], zoom_start=zoom, tiles="OpenStreetMap")
 
-        for idx, p in enumerate(places):
-            lat = float(p["y"])
-            lng = float(p["x"])
-            name = p.get("place_name")
-            addr = p.get("road_address_name") or p.get("address_name")
-            phone = p.get("phone", "전화번호 없음")
-            place_url = p.get("place_url", "#")
+        if places:
+            for idx, p in enumerate(places):
+                lat = float(p["y"])
+                lng = float(p["x"])
+                name = p.get("place_name")
+                addr = p.get("road_address_name") or p.get("address_name")
+                phone = p.get("phone", "전화번호 미등록")
+                place_url = p.get("place_url", "#")
 
-            popup_html = f"""
-            <div style="font-family: 'Pretendard', sans-serif; min-width: 170px; padding: 4px;">
-                <span style="background: #EAF3EC; color: #325838; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px;">#{idx+1} 추천</span>
-                <h5 style="margin: 6px 0 4px 0; color: #2A3C2D; font-size: 14px; font-weight: 700;">{name}</h5>
-                <p style="margin: 0; font-size: 11px; color: #5B6A5E;">{addr}</p>
-                <p style="margin: 3px 0 8px 0; font-size: 11px; color: #8F9E92;">📞 {phone}</p>
-                <a href="{place_url}" target="_blank" style="display: inline-block; background: #608A64; color: #FFFFFF; font-size: 11px; font-weight: 600; text-decoration: none; padding: 4px 10px; border-radius: 6px;">카카오맵 상세 보기 ↗</a>
-            </div>
-            """
+                popup_html = f"""
+                <div style="font-family: sans-serif; min-width: 160px; padding: 4px;">
+                    <span style="background: #EAF3EC; color: #325838; font-size: 10px; font-weight: bold; padding: 2px 5px; border-radius: 3px;">#{idx+1}</span>
+                    <h5 style="margin: 4px 0; color: #2A3C2D; font-size: 13px; font-weight: bold;">{name}</h5>
+                    <p style="margin: 0; font-size: 11px; color: #5B6A5E;">{addr}</p>
+                    <p style="margin: 2px 0 6px 0; font-size: 10px; color: #8F9E92;">📞 {phone}</p>
+                    <a href="{place_url}" target="_blank" style="display: inline-block; background: #608A64; color: #FFF; font-size: 11px; text-decoration: none; padding: 3px 8px; border-radius: 4px; font-weight: bold;">카카오맵 상세 ↗</a>
+                </div>
+                """
+                folium.Marker(
+                    location=[lat, lng],
+                    popup=folium.Popup(popup_html, max_width=260),
+                    tooltip=name,
+                    icon=folium.Icon(color="red" if idx == 0 else "green", icon="star" if idx == 0 else "info-sign")
+                ).add_to(m)
+        else:
+            # 검색 결과가 아직 없을 때 기본 마커
             folium.Marker(
-                location=[lat, lng],
-                popup=folium.Popup(popup_html, max_width=280),
-                tooltip=name,
-                icon=folium.Icon(color="green" if idx == 0 else "lightgreen", icon="star" if idx == 0 else "info-sign")
+                location=[center_lat, center_lng],
+                popup="기본 위치: 서울 N서울타워",
+                tooltip="서울 N서울타워",
+                icon=folium.Icon(color="red", icon="info-sign")
             ).add_to(m)
 
-        st_folium(m, width="100%", height=540)
+        # 지도 출력
+        st_folium(m, width="100%", height=530, returned_objects=[])
 
     with list_col:
-        st.markdown("<h4 style='font-size: 15px; font-weight: 700; color: #344837; margin-bottom: 12px;'>📍 검색된 장소</h4>", unsafe_allow_html=True)
+        st.markdown("<h4 style='font-size: 15px; font-weight: 700; color: #344837; margin-bottom: 10px;'>📍 검색된 장소</h4>", unsafe_allow_html=True)
         if places:
             for idx, p in enumerate(places):
                 category = p.get('category_name', '').split('>')[-1].strip() or "명소"
@@ -335,18 +344,18 @@ with tab_map:
                 <div class="spot-card">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <b style="font-size: 13px; color: #2A3C2D;">{idx+1}. {p['place_name']}</b>
-                        <span style="font-size: 11px; background: #FFF9E0; color: #7B6816; padding: 2px 6px; border-radius: 4px; font-weight: 600;">{category}</span>
+                        <span style="font-size: 10px; background: #FFF9E0; color: #7B6816; padding: 2px 5px; border-radius: 4px; font-weight: 600;">{category}</span>
                     </div>
-                    <div style="font-size: 12px; color: #718073; margin-top: 4px;">
+                    <div style="font-size: 11.5px; color: #718073; margin-top: 4px;">
                         {p.get('road_address_name') or p.get('address_name')}
                     </div>
                     <div style="margin-top: 6px;">
-                        <a href="{p['place_url']}" target="_blank" style="font-size: 12px; color: #4A734E; font-weight: 600; text-decoration: none;">상세 안내 보기 ↗</a>
+                        <a href="{p['place_url']}" target="_blank" style="font-size: 11.5px; color: #4A734E; font-weight: 600; text-decoration: none;">상세 안내 보기 ↗</a>
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
         else:
-            st.info("검색어를 입력하시면 주변 장소가 안내됩니다.")
+            st.info("검색 결과가 없습니다. 상단 검색창에 '서울 남산타워' 등 원하는 장소를 입력해 보세요.")
 
 # ----------------- TAB 2: 실시간 환율 계산기 -----------------
 with tab_exchange:
@@ -377,16 +386,16 @@ with tab_exchange:
 
         with c3:
             st.metric(
-                label=f"1 {base_curr} 매매기준율",
+                label=f"1 {base_curr} 당 매매기준율",
                 value=f"{unit_rate:,.2f} 원"
             )
 
         st.markdown(f"""
         <div class="exchange-card">
             <div style="font-size: 13px; font-weight: 600; color: #6E7E70; margin-bottom: 6px;">실시간 환산 결과</div>
-            <span style="font-size: 24px; font-weight: 800; color: #2A3C2D;">{amount:,.2f} {base_curr}</span>
-            <span style="font-size: 20px; color: #9EB0A1; margin: 0 10px;">≈</span>
-            <span style="font-size: 28px; font-weight: 800; color: #325838;">{krw_value:,.0f} KRW (원)</span>
+            <span style="font-size: 22px; font-weight: 800; color: #2A3C2D;">{amount:,.2f} {base_curr}</span>
+            <span style="font-size: 18px; color: #9EB0A1; margin: 0 8px;">≈</span>
+            <span style="font-size: 26px; font-weight: 800; color: #325838;">{krw_value:,.0f} KRW (원)</span>
         </div>
         """, unsafe_allow_html=True)
 
